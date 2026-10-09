@@ -1,0 +1,291 @@
+/*
+ * App Global CSS
+ * ----------------------------------------------------------------------------
+ * Put style rules here that you want to apply globally. These styles are for
+ * the entire app and not just one component. Additionally, this file can be
+ * used as an entry point to import other CSS/Sass files to be included in the
+ * output CSS.
+ * For more information on global stylesheets, visit the documentation:
+ * https://ionicframework.com/docs/layout/global-stylesheets
+ */
+
+/* Core CSS required for Ionic components to work properly */
+@import "@ionic/angular/css/core.css";
+
+/* Basic CSS for apps built with Ionic */
+@import "@ionic/angular/css/normalize.css";
+@import "@ionic/angular/css/structure.css";
+@import "@ionic/angular/css/typography.css";
+@import "@ionic/angular/css/display.css";
+
+/* Optional CSS utils that can be commented out */
+@import "@ionic/angular/css/padding.css";
+@import "@ionic/angular/css/float-elements.css";
+@import "@ionic/angular/css/text-alignment.css";
+@import "@ionic/angular/css/text-transformation.css";
+@import "@ionic/angular/css/flex-utils.css";
+
+/**
+ * Ionic Dark Mode
+ * -----------------------------------------------------
+ * For more info, please see:
+ * https://ionicframework.com/docs/theming/dark-mode
+ */
+
+/* Light palette only, matching the shared SEEFIX/OCR mobile look (form text is forced dark below). */
+/* @import "@ionic/angular/css/palettes/dark.always.css"; */
+/* @import "@ionic/angular/css/palettes/dark.class.css"; */
+/* @import '@ionic/angular/css/palettes/dark.system.css'; */
+
+/* ===== Typography ===== */
+@font-face {
+  font-family: 'Poppins';
+  src: url('./assets/fonts/poppins/Poppins-Regular.ttf');
+  font-weight: 400;
+}
+
+@font-face {
+  font-family: 'Poppins';
+  src: url('./assets/fonts/poppins/Poppins-SemiBold.ttf');
+  font-weight: 600;
+}
+
+@font-face {
+  font-family: 'Poppins';
+  src: url('./assets/fonts/poppins/Poppins-Bold.ttf');
+  font-weight: 700;
+}
+
+:root,
+.md,
+.ios {
+  --ion-font-family: 'Poppins', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: #fff;
+  font-family: var(--ion-font-family);
+}
+
+/* ===== Form fields (outline, 2px border, 10px radius, 16px bold value) ===== */
+ion-input,
+ion-textarea,
+ion-select {
+  --color: #000;
+  --border-width: 2px !important;
+  --border-radius: 10px !important;
+  --border-color-focused: var(--ion-color-primary) !important;
+  --highlight-color-focused: var(--ion-color-primary) !important;
+  --highlight-color-valid: var(--ion-color-primary) !important;
+  font-size: 16px !important;
+}
+
+ion-input input,
+ion-textarea textarea,
+ion-select::part(text) {
+  font-size: 16px !important;
+  font-weight: 700 !important;
+  color: #000 !important;
+}
+
+ion-input input::placeholder,
+ion-textarea textarea::placeholder {
+  font-weight: 400 !important;
+  color: var(--ion-color-medium-shade) !important;
+}
+
+ion-select::part(placeholder) {
+  font-weight: 400;
+}
+
+/* Vertical stack of outline fields */
+.fieldset {
+  display: flex;
+  flex-direction: column;
+  row-gap: 15px;
+}
+
+.section-title {
+  margin: 8px 0 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.section-hint {
+  margin: -8px 0 0;
+  font-size: 14px;
+  color: var(--ion-color-medium-shade);
+}
+
+.form-error {
+  display: block;
+  font-size: 14px;
+}
+
+/* ===== Buttons ===== */
+ion-button.regular {
+  height: 56px !important;
+  --border-radius: 10px !important;
+  font-size: 16px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* ===== Header ===== */
+ion-header.no-shadow,
+.header-md.no-shadow {
+  box-shadow: none !important;
+}
+
+ion-header.no-shadow::after {
+  display: none !important;
+}
+
+ion-toolbar[color='primary'] ion-title {
+  font-weight: 600;
+}
+
+/* ===== Cards ===== */
+.md ion-card.no-shadow {
+  box-shadow: none !important;
+  border: none !important;
+}
+
+/* ===== Floating "Report an Issue" action ===== */
+ion-fab.report-fab {
+  margin-bottom: var(--safe-bottom);
+}
+
+/* ===== Overlays ===== */
+.alert-button-cancel {
+  color: var(--ion-color-medium-shade);
+}
+
+.alert-button-danger,
+.alert-button-role-destructive {
+  color: var(--ion-color-danger) !important;
+  font-weight: 600;
+}
+
+.action-sheet-wrapper {
+  padding-bottom: var(--safe-bottom) !important;
+}
+
+.action-sheet-button .action-sheet-button-inner ion-icon {
+  margin-inline-end: 15px;
+}
+
+/* ===== Page width on tablets / desktop ===== */
+.content-container {
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+/* ===== Bottom tabs ===== */
+ion-tab-bar {
+  height: 60px;
+}
+
+ion-tab-button {
+  font-size: 12px;
+
+  ion-icon {
+    font-size: 26px;
+  }
+}
+
+/* ===== Auth & account pages (centered card, same look as Login) ===== */
+.auth-page {
+  --background: var(--ion-color-primary-contrast);
+}
+
+.auth-wrap {
+  min-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 400px;
+  margin: 0 !important;
+
+  ion-card-title {
+    font-weight: 700;
+    color: var(--ion-color-primary);
+  }
+
+  ion-card-subtitle {
+    font-size: 16px !important;
+    text-transform: none;
+    font-weight: 400;
+  }
+
+  ion-button.regular {
+    margin: 10px 0 0;
+  }
+}
+
+.link-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  margin-top: 12px;
+
+  ion-button {
+    text-transform: none;
+    font-weight: 600;
+  }
+}
+
+.form-notice {
+  display: block;
+  font-size: 14px;
+}
+
+/* Six-digit code field */
+ion-input.otp-input input {
+  letter-spacing: 0.4em;
+  font-size: 22px !important;
+  text-align: center;
+}
+
+.account-form {
+  max-width: 560px;
+  margin: 0 auto;
+}
+
+.readonly-summary {
+  margin: 0;
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: var(--ion-color-light);
+  font-size: 14px;
+
+  strong {
+    display: block;
+    font-size: 16px;
+    word-break: break-word;
+  }
+}
+
+/* Full-screen success modal (also full-screen on tablets/desktop) */
+ion-modal.success-screen-modal {
+  --width: 100%;
+  --height: 100%;
+  --border-radius: 0;
+}
+
+.alert-button-confirm {
+  color: var(--ion-color-primary) !important;
+  font-weight: 600;
+}

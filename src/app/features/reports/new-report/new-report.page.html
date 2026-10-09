@@ -1,0 +1,228 @@
+<ion-header class="no-shadow">
+  <ion-toolbar color="primary">
+    <ion-buttons slot="start">
+      <ion-back-button defaultHref="/tabs/home"></ion-back-button>
+    </ion-buttons>
+    <ion-title>Report an Issue</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content>
+  @if (!unlocked()) {
+    @switch (eligibility()) {
+      @case ('blocked') {
+        <app-empty-state
+          [fill]="true"
+          icon="hourglass-outline"
+          color="warning"
+          title="You already have a report in progress"
+          [message]="
+            (activeReport() ? activeReport()!.reportNo + ' is ' + statusLabel(activeReport()!.status).toLowerCase() + '. ' : '') +
+            'You can submit a new report once it is resolved, closed or cancelled.'
+          "
+        >
+          @if (activeReport()) {
+            <ion-button class="regular gate-button" expand="block" (click)="viewActiveReport()">View active report</ion-button>
+          }
+          <ion-button fill="clear" (click)="goBack()">Back to Home</ion-button>
+        </app-empty-state>
+      }
+      @case ('error') {
+        <app-empty-state
+          [fill]="true"
+          icon="cloud-offline-outline"
+          title="Can't check right now"
+          message="We couldn't confirm whether you can submit a new report. Check your connection and try again."
+        >
+          <ion-button class="regular gate-button" expand="block" (click)="checkEligibility()">Retry</ion-button>
+        </app-empty-state>
+      }
+      @default {
+        <app-empty-state [fill]="true" icon="hourglass-outline" title="Checking whether you can submit…">
+          <ion-spinner name="dots" aria-label="Checking"></ion-spinner>
+        </app-empty-state>
+      }
+    }
+  } @else {
+  <form [formGroup]="form" (ngSubmit)="submit()" novalidate id="report-form" class="content-container">
+    <div class="ion-padding fieldset">
+      <!-- 1. Photos -->
+      <h2 class="section-title">Photos of the issue <span class="required" aria-hidden="true">*</span></h2>
+      <p class="section-hint">Add 1–{{ maxImages }} clear photos. The first photo is the main image.</p>
+
+      @if (photos().length === 0) {
+        <div class="box" [class.invalid]="photoError()">
+          <ion-icon class="placeholder-icon" name="camera-outline" color="primary" aria-hidden="true"></ion-icon>
+          <h5>Take or choose a photo</h5>
+          <ion-note>JPEG, PNG or WebP up to {{ maxUploadMb }} MB each</ion-note>
+          <ion-button fill="outline" shape="round" (click)="addPhoto()" [disabled]="submitting()">
+            <ion-icon name="images-outline" slot="start" aria-hidden="true"></ion-icon>
+            Add photo
+          </ion-button>
+        </div>
+      } @else {
+        <div class="photo-grid">
+          @for (photo of photos(); track photo.id; let first = $first; let index = $index) {
+            <div class="photo-tile">
+              <img [src]="photo.previewUrl" [alt]="'Selected photo ' + (index + 1)" />
+              @if (first) {
+                <span class="primary-tag">Main</span>
+              }
+              <ion-button
+                class="remove-photo"
+                size="small"
+                fill="solid"
+                color="dark"
+                shape="round"
+                (click)="removePhoto(photo)"
+                [attr.aria-label]="'Remove photo ' + (index + 1)"
+              >
+                <ion-icon slot="icon-only" name="close-outline" aria-hidden="true"></ion-icon>
+              </ion-button>
+            </div>
+          }
+          @if (remainingSlots() > 0) {
+            <button type="button" class="add-tile" (click)="addPhoto()" [disabled]="submitting()" aria-label="Add photo">
+              <ion-icon name="camera-outline" aria-hidden="true"></ion-icon>
+              <span>Add</span>
+            </button>
+          }
+        </div>
+      }
+      @if (photoError()) {
+        <ion-note color="danger" class="form-error" role="alert">Add at least one photo of the issue.</ion-note>
+      }
+
+      <!-- 2–3. Details -->
+      <h2 class="section-title">Details</h2>
+      <ion-textarea
+        formControlName="description"
+        label="Describe the problem *"
+        labelPlacement="stacked"
+        fill="outline"
+        placeholder="What is damaged? Where is it? What did you notice?"
+        [autoGrow]="true"
+        [rows]="3"
+        [counter]="true"
+        [maxlength]="4000"
+        errorText="Describe the problem (at least 5 characters)"
+      ></ion-textarea>
+
+      <ion-textarea
+        formControlName="notes"
+        label="Additional details (optional)"
+        labelPlacement="stacked"
+        fill="outline"
+        placeholder="Anything else the Maintenance Team should know"
+        [autoGrow]="true"
+        [rows]="2"
+        [maxlength]="4000"
+      ></ion-textarea>
+
+      <!-- 4. Location -->
+      <h2 class="section-title">Location</h2>
+
+      @if (referenceState() === 'loading') {
+        <div class="inline-loading">
+          <ion-spinner name="dots"></ion-spinner>
+          <span>Loading buildings…</span>
+        </div>
+      }
+
+      @if (referenceState() === 'ready') {
+        <ion-select
+          formControlName="buildingId"
+          label="Building / area"
+          labelPlacement="stacked"
+          fill="outline"
+          placeholder="Select a building"
+          interface="action-sheet"
+          [interfaceOptions]="{ header: 'Select a building' }"
+        >
+          @for (building of buildings(); track building.id) {
+            <ion-select-option [value]="building.id">{{ building.name }}</ion-select-option>
+          }
+          <ion-select-option [value]="otherLocation">My building isn't listed</ion-select-option>
+        </ion-select>
+
+        @if (buildingIdValue() && !manualLocation()) {
+          @if (locationsLoading()) {
+            <div class="inline-loading">
+              <ion-spinner name="dots"></ion-spinner>
+              <span>Loading locations…</span>
+            </div>
+          } @else {
+            @if (locations().length) {
+              <ion-select
+                formControlName="locationId"
+                label="Location"
+                labelPlacement="stacked"
+                fill="outline"
+                placeholder="Select a location"
+                interface="action-sheet"
+                [interfaceOptions]="{ header: 'Select a location' }"
+              >
+                @for (location of locations(); track location.id) {
+                  <ion-select-option [value]="location.id">{{ locationLabel(location) }}</ion-select-option>
+                }
+              </ion-select>
+            }
+            @if (!locationIdValue()) {
+              <p class="section-hint hint-tight">
+                {{ locations().length ? 'Not listed? Add the floor and room instead.' : 'Add the floor and room (optional).' }}
+              </p>
+              <ion-input formControlName="floor" label="Floor (optional)" labelPlacement="stacked" fill="outline" placeholder="e.g. 2nd Floor"></ion-input>
+              <ion-input formControlName="roomOrArea" label="Room or area (optional)" labelPlacement="stacked" fill="outline" placeholder="e.g. Room 204"></ion-input>
+            }
+          }
+        }
+      }
+
+      @if (manualLocation()) {
+        <ion-input formControlName="building" label="Building (optional)" labelPlacement="stacked" fill="outline" placeholder="e.g. Old Building"></ion-input>
+        <ion-input formControlName="floor" label="Floor (optional)" labelPlacement="stacked" fill="outline" placeholder="e.g. 2nd Floor"></ion-input>
+        <ion-input formControlName="roomOrArea" label="Room or area (optional)" labelPlacement="stacked" fill="outline" placeholder="e.g. Room 204"></ion-input>
+      }
+
+      <!-- 5. Optional GPS -->
+      @if (gps(); as fix) {
+        <div class="gps-card attached">
+          <ion-icon name="location-outline" color="success" aria-hidden="true"></ion-icon>
+          <div class="gps-text">
+            <strong>Current location attached</strong>
+            <span>{{ fix.accuracy ? 'Accuracy about ' + fix.accuracy + ' m' : 'Approximate position' }}</span>
+          </div>
+          <ion-button fill="clear" color="medium" (click)="removeGps()">Remove</ion-button>
+        </div>
+      } @else {
+        <ion-button fill="outline" expand="block" class="regular gps-button" (click)="attachGps()" [disabled]="locating()">
+          @if (locating()) {
+            <ion-spinner slot="start" name="dots"></ion-spinner>
+          } @else {
+            <ion-icon slot="start" name="navigate-outline" aria-hidden="true"></ion-icon>
+          }
+          Add my current location (optional)
+        </ion-button>
+      }
+    </div>
+  </form>
+  }
+</ion-content>
+
+<!-- 6. Review & submit -->
+@if (unlocked()) {
+<ion-footer class="no-shadow">
+  <ion-toolbar>
+    <div class="submit-bar ion-padding-horizontal content-container">
+      <ion-note>{{ photos().length }} of {{ maxImages }} photos{{ gps() ? ' • GPS attached' : '' }}</ion-note>
+      <ion-button class="regular" expand="block" (click)="submit()" [disabled]="submitting()">
+        @if (submitting()) {
+          <ion-spinner name="dots" aria-label="Submitting"></ion-spinner>
+        } @else {
+          Submit report
+        }
+      </ion-button>
+    </div>
+  </ion-toolbar>
+</ion-footer>
+}

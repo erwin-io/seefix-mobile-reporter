@@ -1,0 +1,8 @@
+<div class="empty-state ion-padding ion-text-center" role="status">
+  <ion-icon [name]="icon()" [color]="color()" aria-hidden="true"></ion-icon>
+  <h2>{{ title() }}</h2>
+  @if (message(); as text) {
+    <ion-text color="medium"><p>{{ text }}</p></ion-text>
+  }
+  <ng-content></ng-content>
+</div>

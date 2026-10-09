@@ -1,0 +1,19 @@
+<ion-card [class.muted]="muted()" [style.--accent]="accent()" [style.--accent-rgb]="accentRgb()">
+  <ion-card-header>
+    <div class="head">
+      <div class="badge" aria-hidden="true">
+        <ion-icon [name]="icon()"></ion-icon>
+      </div>
+      <div class="titles">
+        <ion-card-subtitle>{{ eyebrow() }}</ion-card-subtitle>
+        @if (title(); as text) {
+          <ion-card-title>{{ text }}</ion-card-title>
+        }
+      </div>
+      <div class="aside"><ng-content select="[slot=aside]"></ng-content></div>
+    </div>
+  </ion-card-header>
+  <ion-card-content>
+    <ng-content></ng-content>
+  </ion-card-content>
+</ion-card>

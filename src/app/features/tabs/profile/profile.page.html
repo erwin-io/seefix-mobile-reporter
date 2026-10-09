@@ -1,0 +1,117 @@
+<ion-header class="no-shadow">
+  <ion-toolbar color="primary">
+    <ion-title>Profile</ion-title>
+    <ion-buttons slot="end">
+      <app-notification-bell></app-notification-bell>
+    </ion-buttons>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content>
+  <ion-refresher slot="fixed" (ionRefresh)="onRefresh($any($event))">
+    <ion-refresher-content></ion-refresher-content>
+  </ion-refresher>
+
+  <div class="content-container">
+
+  @if (user(); as account) {
+    <ion-list>
+      <ion-item lines="none" class="identity">
+        <ion-avatar slot="start" aria-hidden="true">
+          <div class="initials">{{ initials() }}</div>
+        </ion-avatar>
+        <ion-label>
+          <h2>{{ account.fullName }}</h2>
+          <p>{{ roleLabel() }} account</p>
+        </ion-label>
+      </ion-item>
+    </ion-list>
+
+    <ion-list inset="true">
+      <ion-list-header><ion-label>Account</ion-label></ion-list-header>
+      <ion-item>
+        <ion-icon slot="start" name="mail-outline" aria-hidden="true"></ion-icon>
+        <ion-label class="ion-text-wrap">
+          <h3>Email</h3>
+          <p>{{ account.email }}</p>
+        </ion-label>
+        @if (account.emailVerified) {
+          <ion-badge slot="end" color="success" class="status-badge">
+            <ion-icon name="checkmark-circle-outline" aria-hidden="true"></ion-icon> Verified
+          </ion-badge>
+        } @else {
+          <ion-badge slot="end" color="medium" class="status-badge">
+            <ion-icon name="alert-circle-outline" aria-hidden="true"></ion-icon> Not verified
+          </ion-badge>
+        }
+      </ion-item>
+      @if (!account.emailVerified) {
+        <ion-item lines="none" class="hint-item">
+          <ion-label class="ion-text-wrap">
+            <p>Verify a real email with <strong>Change email</strong> so you can recover your password.</p>
+          </ion-label>
+        </ion-item>
+      }
+      @if (account.phone) {
+        <ion-item>
+          <ion-icon slot="start" name="call-outline" aria-hidden="true"></ion-icon>
+          <ion-label>Phone</ion-label>
+          <ion-note slot="end">{{ account.phone }}</ion-note>
+        </ion-item>
+      }
+      @if (account.departmentOrTrade) {
+        <ion-item>
+          <ion-icon slot="start" name="briefcase-outline" aria-hidden="true"></ion-icon>
+          <ion-label>Department</ion-label>
+          <ion-note slot="end">{{ account.departmentOrTrade }}</ion-note>
+        </ion-item>
+      }
+      <ion-item lines="none">
+        <ion-icon slot="start" name="id-card-outline" aria-hidden="true"></ion-icon>
+        <ion-label>Role</ion-label>
+        <ion-note slot="end">{{ roleLabel() }}</ion-note>
+      </ion-item>
+    </ion-list>
+
+    <ion-list inset="true">
+      <ion-list-header><ion-label>Settings</ion-label></ion-list-header>
+      <ion-item button [detail]="true" (click)="open('/account/edit-profile')">
+        <ion-icon slot="start" color="primary" name="create-outline" aria-hidden="true"></ion-icon>
+        <ion-label>Edit profile</ion-label>
+      </ion-item>
+      <ion-item button [detail]="true" (click)="open('/account/change-email')">
+        <ion-icon slot="start" color="primary" name="mail-outline" aria-hidden="true"></ion-icon>
+        <ion-label>Change email</ion-label>
+      </ion-item>
+      <ion-item button [detail]="true" lines="none" (click)="open('/account/change-password')">
+        <ion-icon slot="start" color="primary" name="lock-closed-outline" aria-hidden="true"></ion-icon>
+        <ion-label>Change password</ion-label>
+      </ion-item>
+    </ion-list>
+
+    <ion-list inset="true">
+      <ion-list-header><ion-label>About</ion-label></ion-list-header>
+      <ion-item>
+        <ion-icon slot="start" name="information-circle-outline" aria-hidden="true"></ion-icon>
+        <ion-label>SEEFIX Reporter</ion-label>
+        <ion-note slot="end">Version {{ appVersion }}</ion-note>
+      </ion-item>
+      <ion-item lines="none">
+        <ion-label class="ion-text-wrap">
+          <p>
+            Photos you submit are screened automatically first. Final decisions on every report are made by the
+            Maintenance Team.
+          </p>
+        </ion-label>
+      </ion-item>
+    </ion-list>
+
+    <div class="ion-padding">
+      <ion-button class="regular" expand="block" color="danger" fill="outline" (click)="confirmLogout()">
+        <ion-icon slot="start" name="log-out-outline" aria-hidden="true"></ion-icon>
+        Log Out
+      </ion-button>
+    </div>
+  }
+  </div>
+</ion-content>

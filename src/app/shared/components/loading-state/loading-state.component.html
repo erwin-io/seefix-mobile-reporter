@@ -1,0 +1,14 @@
+<ion-list aria-busy="true" aria-label="Loading">
+  @for (row of placeholders(); track row) {
+    <ion-item>
+      @if (withThumbnail()) {
+        <ion-thumbnail slot="start"><ion-skeleton-text [animated]="true"></ion-skeleton-text></ion-thumbnail>
+      }
+      <ion-label>
+        <h2><ion-skeleton-text [animated]="true" class="w-50"></ion-skeleton-text></h2>
+        <p><ion-skeleton-text [animated]="true" class="w-80"></ion-skeleton-text></p>
+        <p><ion-skeleton-text [animated]="true" class="w-30"></ion-skeleton-text></p>
+      </ion-label>
+    </ion-item>
+  }
+</ion-list>

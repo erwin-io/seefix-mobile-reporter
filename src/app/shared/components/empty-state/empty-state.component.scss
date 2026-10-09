@@ -1,0 +1,38 @@
+:host {
+  display: block;
+}
+
+/* Fills ion-content's scroll area (its containing block) and centers vertically. */
+:host(.fill) {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+
+  .empty-state {
+    pointer-events: auto;
+  }
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: 32px;
+  padding-bottom: 32px;
+}
+
+ion-icon {
+  font-size: 56px;
+}
+
+h2 {
+  margin: 12px 0 4px;
+  font-size: 1.1rem;
+}
+
+p {
+  margin: 0 0 16px;
+}

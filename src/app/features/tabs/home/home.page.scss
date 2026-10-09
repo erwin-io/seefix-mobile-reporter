@@ -1,0 +1,21 @@
+.greeting h1 {
+  margin: 8px 0 4px;
+  font-size: 1.6rem;
+  font-weight: 600;
+}
+
+.greeting p {
+  margin: 0 0 16px;
+  color: var(--ion-color-medium);
+}
+
+.offline-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+}
+
+.updates {
+  margin-bottom: 88px; /* keep the last item clear of the FAB */
+}

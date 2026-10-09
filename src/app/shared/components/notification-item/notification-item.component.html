@@ -1,0 +1,24 @@
+<ion-item
+  button
+  [detail]="item().entityType === 'REPORT'"
+  [lines]="lines()"
+  [class.unread]="!item().isRead"
+  (click)="selected.emit(item())"
+>
+  <div slot="start" class="leading" aria-hidden="true">
+    <ion-icon [name]="item().isRead ? 'notifications-outline' : 'notifications'"></ion-icon>
+    @if (!item().isRead) {
+      <span class="dot"></span>
+    }
+  </div>
+  <ion-label class="ion-text-wrap">
+    <h3>
+      @if (!item().isRead) {
+        <span class="sr-only">Unread: </span>
+      }
+      {{ item().title }}
+    </h3>
+    <p class="preview" [class.compact]="compact()">{{ item().message }}</p>
+    <ion-note>{{ item().createdAt | date: (compact() ? 'MMM d, h:mm a' : 'MMM d, y, h:mm a') }}</ion-note>
+  </ion-label>
+</ion-item>

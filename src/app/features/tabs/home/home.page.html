@@ -1,0 +1,71 @@
+<ion-header class="no-shadow">
+  <ion-toolbar color="primary">
+    <ion-title>Home</ion-title>
+    <ion-buttons slot="end">
+      <app-notification-bell></app-notification-bell>
+    </ion-buttons>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content>
+  <ion-refresher slot="fixed" (ionRefresh)="onRefresh($any($event))">
+    <ion-refresher-content></ion-refresher-content>
+  </ion-refresher>
+
+  <div class="content-container">
+    @if (!online()) {
+      <ion-note class="offline-note" color="medium" role="status">
+        <ion-icon name="cloud-offline-outline" aria-hidden="true"></ion-icon>
+        You're offline. Showing what was last loaded.
+      </ion-note>
+    }
+
+    <section class="ion-padding greeting">
+      <h1>Hello{{ firstName() ? ', ' + firstName() : '' }}</h1>
+      <p>Report an issue with the <strong>+</strong> button, or check your updates below.</p>
+    </section>
+
+    <app-active-report-banner></app-active-report-banner>
+
+    <ion-list>
+      <ion-list-header>
+        <ion-label>Recent reports</ion-label>
+        @if (recentReports().length) {
+          <ion-button (click)="viewAllReports()">View all</ion-button>
+        }
+      </ion-list-header>
+
+      @if (!reports.loaded() && !reports.error()) {
+        <app-loading-state [rows]="2"></app-loading-state>
+      } @else if (reports.error() && !recentReports().length) {
+        <app-empty-state icon="alert-circle-outline" title="Couldn't load your reports" [message]="reports.error()!.userMessage">
+          <ion-button fill="outline" (click)="retry()">Retry</ion-button>
+        </app-empty-state>
+      } @else {
+        @for (report of recentReports(); track report.id) {
+          <app-report-list-item [report]="report"></app-report-list-item>
+        } @empty {
+          <app-empty-state
+            icon="document-text-outline"
+            title="No reports yet"
+            message="Tap the + button to report your first issue."
+          ></app-empty-state>
+        }
+      }
+    </ion-list>
+
+    @if (recentUpdates().length) {
+      <ion-list class="updates">
+        <ion-list-header>
+          <ion-label>Latest updates</ion-label>
+          <ion-button (click)="viewAllNotifications()">View all</ion-button>
+        </ion-list-header>
+        @for (item of recentUpdates(); track item.id) {
+          <app-notification-item [item]="item" [compact]="true" (selected)="openUpdate($event)"></app-notification-item>
+        }
+      </ion-list>
+    }
+  </div>
+
+  <app-report-fab slot="fixed"></app-report-fab>
+</ion-content>

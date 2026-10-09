@@ -1,0 +1,21 @@
+<ion-content class="ion-padding">
+  <div class="launch">
+    @if (offline()) {
+      <ion-icon name="cloud-offline-outline" color="medium" aria-hidden="true"></ion-icon>
+      <h2>You're offline</h2>
+      <ion-text color="medium">
+        <p>We couldn't reach SEEFIX to confirm your session. Check your connection and retry.</p>
+      </ion-text>
+      <ion-button expand="block" (click)="retry()" [disabled]="retrying()">
+        @if (retrying()) {
+          <ion-spinner name="dots"></ion-spinner>
+        } @else {
+          Retry
+        }
+      </ion-button>
+      <ion-button expand="block" fill="clear" (click)="signInAgain()">Sign in with another account</ion-button>
+    } @else {
+      <ion-spinner aria-label="Loading"></ion-spinner>
+    }
+  </div>
+</ion-content>

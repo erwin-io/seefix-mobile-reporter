@@ -1,0 +1,58 @@
+<ion-header class="no-shadow">
+  <ion-toolbar color="primary">
+    <ion-buttons slot="start">
+      <ion-back-button defaultHref="/tabs/home"></ion-back-button>
+    </ion-buttons>
+    <ion-title>Notifications</ion-title>
+    @if (store.unreadCount() > 0) {
+      <ion-buttons slot="end">
+        <ion-button (click)="markAllRead()" [disabled]="markingAll()" aria-label="Mark all as read" title="Mark all as read">
+          @if (markingAll()) {
+            <ion-spinner slot="icon-only" name="crescent"></ion-spinner>
+          } @else {
+            <ion-icon slot="icon-only" name="checkmark-done-outline" aria-hidden="true"></ion-icon>
+          }
+        </ion-button>
+      </ion-buttons>
+    }
+  </ion-toolbar>
+</ion-header>
+
+<ion-content>
+  <ion-refresher slot="fixed" (ionRefresh)="onRefresh($any($event))">
+    <ion-refresher-content></ion-refresher-content>
+  </ion-refresher>
+
+  @if (!store.loaded() && !store.error()) {
+    <div class="content-container">
+      <app-loading-state [rows]="5" [withThumbnail]="false"></app-loading-state>
+    </div>
+  } @else if (store.error() && !store.items().length) {
+    <app-empty-state
+      [fill]="true"
+      icon="alert-circle-outline"
+      title="Couldn't load notifications"
+      [message]="store.error()!.userMessage"
+    >
+      <ion-button fill="outline" (click)="retry()">Retry</ion-button>
+    </app-empty-state>
+  } @else if (!store.items().length) {
+    <app-empty-state
+      [fill]="true"
+      icon="notifications-off-outline"
+      title="You're all caught up"
+      message="Updates about your reports will appear here."
+    ></app-empty-state>
+  } @else {
+    <div class="content-container">
+      @if (store.unreadCount() > 0) {
+        <p class="summary">{{ store.unreadCount() }} unread</p>
+      }
+      <ion-list>
+        @for (item of store.items(); track item.id) {
+          <app-notification-item [item]="item" (selected)="open($event)"></app-notification-item>
+        }
+      </ion-list>
+    </div>
+  }
+</ion-content>

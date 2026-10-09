@@ -1,0 +1,18 @@
+ion-thumbnail {
+  --size: 64px;
+  --border-radius: 8px;
+  align-self: flex-start;
+  margin-top: 12px;
+}
+
+.thumb-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 8px;
+  background: var(--ion-color-light);
+  color: var(--ion-color-medium);
+  font-size: 24px;
+}

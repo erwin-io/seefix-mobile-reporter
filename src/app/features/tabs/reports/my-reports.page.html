@@ -1,0 +1,82 @@
+<ion-header class="no-shadow">
+  <ion-toolbar color="primary">
+    <ion-title>My Reports</ion-title>
+    <ion-buttons slot="end">
+      <app-notification-bell></app-notification-bell>
+    </ion-buttons>
+  </ion-toolbar>
+  <ion-toolbar class="search">
+    <ion-searchbar
+      placeholder="Search reports"
+      [value]="query()"
+      [debounce]="200"
+      (ionInput)="onSearch($event.detail.value)"
+      aria-label="Search your reports"
+    ></ion-searchbar>
+  </ion-toolbar>
+  <ion-toolbar class="filters">
+    <ion-segment [value]="filter()" (ionChange)="onFilterChange($event.detail.value)" aria-label="Filter reports">
+      <ion-segment-button value="all"><ion-label>All</ion-label></ion-segment-button>
+      <ion-segment-button value="ongoing"><ion-label>Ongoing</ion-label></ion-segment-button>
+      <ion-segment-button value="resolved"><ion-label>Resolved</ion-label></ion-segment-button>
+      <ion-segment-button value="closed"><ion-label>Closed</ion-label></ion-segment-button>
+    </ion-segment>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content>
+  <ion-refresher slot="fixed" (ionRefresh)="onRefresh($any($event))">
+    <ion-refresher-content></ion-refresher-content>
+  </ion-refresher>
+
+  <div class="content-container">
+    @if (!online()) {
+      <ion-note class="offline-note" color="medium" role="status">
+        <ion-icon name="cloud-offline-outline" aria-hidden="true"></ion-icon>
+        You're offline. Showing what was last loaded.
+      </ion-note>
+    }
+
+    <app-active-report-banner></app-active-report-banner>
+
+    @if (!store.loaded() && !store.error()) {
+      <app-loading-state [rows]="5"></app-loading-state>
+    } @else if (store.error() && !store.items().length) {
+      <app-empty-state [fill]="true" icon="alert-circle-outline" title="Couldn't load your reports" [message]="store.error()!.userMessage">
+        <ion-button fill="outline" (click)="retry()">Retry</ion-button>
+      </app-empty-state>
+    } @else if (!store.items().length) {
+      <app-empty-state [fill]="true"
+        icon="document-text-outline"
+        title="No reports yet"
+        message="Tap the + button to report your first issue."
+      ></app-empty-state>
+    } @else {
+      <ion-list>
+        @for (report of visible(); track report.id) {
+          <app-report-list-item [report]="report"></app-report-list-item>
+        } @empty {
+          <app-empty-state icon="document-text-outline" title="No matching reports">
+            @if (isFiltered()) {
+              <ion-button fill="outline" (click)="clearFilters()">Clear filters</ion-button>
+            }
+          </app-empty-state>
+        }
+      </ion-list>
+
+      @if (store.mayHaveMore()) {
+        <div class="list-footer ion-padding ion-text-center">
+          <ion-note>Showing your {{ store.items().length }} most recent reports.</ion-note>
+          @if (store.canLoadMore()) {
+            <ion-button fill="clear" (click)="loadMaximum()" [disabled]="store.loading()">
+              Show up to 100 recent reports
+            </ion-button>
+          }
+        </div>
+      }
+    }
+    <div class="fab-spacer"></div>
+  </div>
+
+  <app-report-fab slot="fixed"></app-report-fab>
+</ion-content>

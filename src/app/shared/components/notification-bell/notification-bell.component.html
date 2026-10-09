@@ -1,0 +1,6 @@
+<ion-button fill="clear" [attr.aria-label]="ariaLabel()" (click)="open()">
+  <ion-icon slot="icon-only" name="notifications" aria-hidden="true"></ion-icon>
+  @if (count() > 0) {
+    <ion-badge color="danger" class="bell-badge" aria-hidden="true">{{ badgeText() }}</ion-badge>
+  }
+</ion-button>

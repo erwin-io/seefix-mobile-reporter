@@ -1,0 +1,69 @@
+<ion-header class="no-shadow">
+  <ion-toolbar color="primary">
+    <ion-buttons slot="start">
+      <ion-back-button defaultHref="/account/change-email"></ion-back-button>
+    </ion-buttons>
+    <ion-title>Confirm new email</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content class="ion-padding">
+  @if (pendingEmail(); as newEmail) {
+    <form [formGroup]="form" (ngSubmit)="confirm()" novalidate class="fieldset account-form">
+      <p class="readonly-summary">
+        Code sent to
+        <strong>{{ newEmail }}</strong>
+      </p>
+      <ion-note class="form-notice">
+        Enter the six-digit code from that inbox. After confirming, you'll sign in again with your new email.
+      </ion-note>
+
+      <ion-input
+        class="otp-input"
+        formControlName="code"
+        type="text"
+        label="Verification code"
+        labelPlacement="stacked"
+        fill="outline"
+        placeholder="000000"
+        inputmode="numeric"
+        autocomplete="one-time-code"
+        [maxlength]="6"
+        (ionInput)="onCodeInput($event.detail.value)"
+        errorText="Enter the six-digit code"
+      ></ion-input>
+
+      @if (errorMessage(); as message) {
+        <ion-note class="form-error" color="danger" role="alert">{{ message }}</ion-note>
+      }
+
+      <ion-button class="regular" type="submit" expand="block" [disabled]="confirming()">
+        @if (confirming()) {
+          <ion-spinner name="dots" aria-label="Confirming"></ion-spinner>
+        } @else {
+          Confirm new email
+        }
+      </ion-button>
+
+      <div class="link-row">
+        <ion-button fill="clear" (click)="requestNewCode()" [disabled]="cooldown.seconds() > 0">
+          @if (cooldown.seconds() > 0) {
+            Send a new code in {{ cooldown.seconds() }}s
+          } @else {
+            {{ codeExpired() ? 'Code expired — send a new code' : 'Send a new code' }}
+          }
+        </ion-button>
+        <ion-button fill="clear" color="medium" (click)="requestNewCode()">Use a different email</ion-button>
+      </div>
+    </form>
+  } @else {
+    <app-empty-state
+      [fill]="true"
+      icon="mail-outline"
+      title="No email change in progress"
+      message="Start again from Change email. You'll need your current password."
+    >
+      <ion-button fill="outline" (click)="requestNewCode()">Change email</ion-button>
+    </app-empty-state>
+  }
+</ion-content>

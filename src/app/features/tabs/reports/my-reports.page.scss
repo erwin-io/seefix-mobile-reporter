@@ -1,0 +1,33 @@
+ion-toolbar.search,
+ion-toolbar.filters {
+  --background: var(--ion-color-primary-contrast);
+}
+
+ion-searchbar {
+  --border-radius: 16px;
+  --background: #ededed;
+  --box-shadow: none;
+  padding: 8px 12px;
+}
+
+ion-segment-button {
+  text-transform: none;
+  font-weight: 600;
+  min-width: auto;
+}
+
+.offline-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+}
+
+.list-footer ion-note {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.fab-spacer {
+  height: 88px;
+}

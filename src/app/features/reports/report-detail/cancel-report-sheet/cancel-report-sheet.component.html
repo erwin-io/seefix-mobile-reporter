@@ -1,0 +1,45 @@
+<ion-content class="ion-padding">
+  <div class="sheet">
+    <div class="head">
+      <div class="badge" aria-hidden="true"><ion-icon name="close-circle-outline"></ion-icon></div>
+      <div>
+        <h2>Cancel {{ reportNo() }}?</h2>
+        <p>
+          Cancelling stops this report before the Maintenance Team reviews it. This can't be undone, but the report stays in
+          your history and you can submit a new one.
+        </p>
+      </div>
+    </div>
+
+    <ion-textarea
+      [formControl]="reason"
+      label="Reason for cancelling"
+      labelPlacement="stacked"
+      fill="outline"
+      placeholder="e.g. I submitted the wrong photo."
+      [autoGrow]="true"
+      [rows]="3"
+      [counter]="true"
+      [maxlength]="max"
+      [helperText]="'At least ' + min + ' characters'"
+      [errorText]="'Enter ' + min + '–' + max + ' characters'"
+    ></ion-textarea>
+
+    @if (errorMessage(); as message) {
+      <ion-note class="form-error" color="danger" role="alert">{{ message }}</ion-note>
+    }
+
+    <div class="actions">
+      <ion-button class="regular" expand="block" color="danger" (click)="confirm()" [disabled]="submitting()">
+        @if (submitting()) {
+          <ion-spinner name="dots" aria-label="Cancelling report"></ion-spinner>
+        } @else {
+          Cancel report
+        }
+      </ion-button>
+      <ion-button expand="block" fill="clear" color="medium" (click)="keep()" [disabled]="submitting()">
+        Keep report
+      </ion-button>
+    </div>
+  </div>
+</ion-content>

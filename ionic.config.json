@@ -1,0 +1,7 @@
+{
+  "name": "seefix-reporter",
+  "integrations": {
+    "capacitor": {}
+  },
+  "type": "angular-standalone"
+}

@@ -1,0 +1,291 @@
+<ion-header class="no-shadow">
+  <ion-toolbar color="primary">
+    <ion-buttons slot="start">
+      <ion-back-button defaultHref="/tabs/reports"></ion-back-button>
+    </ion-buttons>
+    <ion-title>Report Details</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content>
+  <ion-refresher slot="fixed" (ionRefresh)="onRefresh($any($event))">
+    <ion-refresher-content></ion-refresher-content>
+  </ion-refresher>
+
+  @if (detail(); as report) {
+    <div class="content-container detail">
+      <!-- Hero: photo, number, status, when and where -->
+      <ion-card class="hero">
+        @if (report.images.length) {
+          <button type="button" class="hero-image" (click)="openImage(report.images[0].url)" aria-label="View main photo">
+            <img [src]="report.images[0].url" [alt]="'Main photo for ' + report.reportNo" loading="lazy" />
+            @if (report.images.length > 1) {
+              <span class="photo-count">
+                <ion-icon name="images-outline" aria-hidden="true"></ion-icon>
+                {{ report.images.length }} photos
+              </span>
+            }
+          </button>
+        }
+        <ion-card-header>
+          <ion-card-subtitle>Report</ion-card-subtitle>
+          <ion-card-title>{{ report.reportNo }}</ion-card-title>
+        </ion-card-header>
+        <ion-card-content>
+          <app-report-status-chip [status]="report.status"></app-report-status-chip>
+          <div class="meta-row">
+            <ion-icon name="time-outline" aria-hidden="true"></ion-icon>
+            <span>Submitted {{ report.createdAt | date: 'MMM d, y, h:mm a' }}</span>
+          </div>
+          <div class="meta-row">
+            <ion-icon name="location-outline" aria-hidden="true"></ion-icon>
+            <span>{{ report.locationText || 'Location not specified' }}</span>
+          </div>
+          @if (report.images.length > 1) {
+            <div class="thumb-strip">
+              @for (image of report.images.slice(1); track image.id; let index = $index) {
+                <button type="button" (click)="openImage(image.url)" [attr.aria-label]="'View photo ' + (index + 2)">
+                  <ion-thumbnail><ion-img [src]="image.url" [alt]="'Photo ' + (index + 2)"></ion-img></ion-thumbnail>
+                </button>
+              }
+            </div>
+          }
+        </ion-card-content>
+      </ion-card>
+
+      <!-- Current business status (highest priority message) -->
+      <app-detail-card [icon]="meta().icon" [color]="meta().color" eyebrow="Current status" [title]="meta().label">
+        <p>{{ meta().description }}</p>
+        @if (report.status === 'RESOLVED' && report.resolvedAt) {
+          <p class="meta-line">
+            <ion-icon name="checkmark-circle-outline" aria-hidden="true"></ion-icon>
+            Resolved {{ report.resolvedAt | date: 'MMM d, y, h:mm a' }}
+          </p>
+        }
+        @if (report.cancellation; as cancellation) {
+          <p class="meta-line">
+            <ion-icon name="time-outline" aria-hidden="true"></ion-icon>
+            Cancelled {{ cancellation.at | date: 'MMM d, y, h:mm a' }}
+          </p>
+          @if (cancellation.reason) {
+            <blockquote class="reason cancel-reason">
+              <span class="reason-label">Your reason</span>
+              {{ cancellation.reason }}
+            </blockquote>
+          }
+        }
+        @if (report.canCancel) {
+          <div class="cancel-block">
+            <p class="meta-line">
+              <ion-icon name="information-circle-outline" aria-hidden="true"></ion-icon>
+              You can cancel this report until the Maintenance Team reviews it.
+            </p>
+            <ion-button
+              class="cancel-button"
+              expand="block"
+              fill="outline"
+              color="danger"
+              (click)="cancelReport()"
+              [disabled]="cancelling()"
+            >
+              <ion-icon slot="start" name="close-circle-outline" aria-hidden="true"></ion-icon>
+              Cancel report
+            </ion-button>
+          </div>
+        }
+      </app-detail-card>
+
+      <!-- Human Maintenance Review outcome -->
+      @if (showReviewCard()) {
+        <app-detail-card
+          icon="people-outline"
+          color="tertiary"
+          eyebrow="Maintenance review"
+          [title]="isHumanScreening() ? report.screening.title : reviewDecisionLabel()"
+        >
+          @if (isHumanScreening()) {
+            <p>{{ report.screening.message }}</p>
+          }
+          @if (report.review?.reason; as reason) {
+            <blockquote class="reason">
+              <span class="reason-label">Reason</span>
+              {{ reason }}
+            </blockquote>
+          }
+          @if (report.review?.reviewedAt; as reviewedAt) {
+            <p class="meta-line">
+              <ion-icon name="time-outline" aria-hidden="true"></ion-icon>
+              Reviewed {{ reviewedAt | date: 'MMM d, y' }}
+            </p>
+          }
+        </app-detail-card>
+      }
+
+      <!-- AI screening (preliminary; never the final decision) -->
+      @if (showScreeningCard()) {
+        <app-detail-card
+          icon="sparkles-outline"
+          [color]="agentActive() ? 'primary' : 'medium'"
+          [eyebrow]="screeningIsHistorical() ? 'Initial AI screening' : screeningSourceLabel(report.screening.source)"
+          [title]="report.screening.title"
+          [muted]="screeningIsHistorical()"
+        >
+          @if (agentActive()) {
+            <ion-spinner slot="aside" name="crescent" color="primary" aria-label="AI assessment in progress"></ion-spinner>
+          } @else if (report.screening.source === 'AI_PRELIMINARY') {
+            <ion-badge slot="aside" color="light" class="pill">Preliminary</ion-badge>
+          }
+          <p>{{ report.screening.message }}</p>
+          @if (agentActive()) {
+            <p class="meta-line">AI assessment in progress. This page updates automatically.</p>
+          } @else if (screeningIsHistorical()) {
+            <p class="meta-line">This was a preliminary check. The Maintenance Team has since reviewed your report.</p>
+          } @else if (report.screening.source === 'AI_PRELIMINARY') {
+            <p class="meta-line">Final decisions belong to the Maintenance Team.</p>
+          }
+        </app-detail-card>
+      }
+
+      <!-- Preliminary assessment details (Facility Issue only) -->
+      @if (report.assessment; as assessment) {
+        <app-detail-card icon="clipboard-outline" color="secondary" eyebrow="Assessment">
+          <div class="facts">
+            <div class="fact">
+              <span class="fact-label">Category</span>
+              <span class="fact-value">{{ assessment.category || '—' }}</span>
+            </div>
+            <div class="fact">
+              <span class="fact-label">Urgency</span>
+              <span class="fact-value">{{ assessment.urgency || '—' }}</span>
+            </div>
+            <div class="fact">
+              <span class="fact-label">Priority</span>
+              <span class="fact-value">{{ assessment.priorityScore ?? 'Not assessed' }}</span>
+            </div>
+          </div>
+          @if (assessment.summary) {
+            <p class="summary-text">{{ assessment.summary }}</p>
+          }
+        </app-detail-card>
+      }
+
+      <!-- Report content -->
+      <app-detail-card icon="document-text-outline" color="medium" eyebrow="Your report" title="What you reported">
+        <p>{{ report.description || 'No description provided.' }}</p>
+        @if (report.notes) {
+          <div class="sub-block">
+            <span class="fact-label">Additional details</span>
+            <p>{{ report.notes }}</p>
+          </div>
+        }
+      </app-detail-card>
+
+      <!-- Work order progress (read-only) -->
+      @if (report.workOrder; as workOrder) {
+        <app-detail-card icon="construct-outline" color="primary" eyebrow="Work order" [title]="workOrder.workOrderNo">
+          <div class="facts">
+            @if (workOrder.status) {
+              <div class="fact">
+                <span class="fact-label">Status</span>
+                <span class="fact-value">{{ statusLabel(workOrder.status) }}</span>
+              </div>
+            }
+            @if (workOrder.plannedStartAt) {
+              <div class="fact">
+                <span class="fact-label">Planned start</span>
+                <span class="fact-value">{{ workOrder.plannedStartAt | date: 'MMM d, y' }}</span>
+              </div>
+            }
+            @if (workOrder.deadline) {
+              <div class="fact">
+                <span class="fact-label">Target completion</span>
+                <span class="fact-value">{{ workOrder.deadline | date: 'MMM d, y' }}</span>
+              </div>
+            }
+          </div>
+        </app-detail-card>
+      }
+
+      <!-- Timeline -->
+      <app-detail-card icon="git-commit-outline" color="primary" eyebrow="Report progress">
+        <ol class="timeline">
+          @for (entry of timelineSteps(); track $index; let first = $first) {
+            <li
+              [class.technical]="entry.step.technical"
+              [class.current]="first"
+              [style.--step]="'var(--ion-color-' + entry.step.color + ')'"
+              [style.--step-rgb]="'var(--ion-color-' + entry.step.color + '-rgb)'"
+            >
+              <span class="node" aria-hidden="true"><ion-icon [name]="entry.step.icon"></ion-icon></span>
+              <div class="step">
+                <strong>{{ entry.step.label }}</strong>
+                <span class="step-meta">
+                  <span class="actor">{{ entry.step.actor }}</span>
+                  · {{ entry.event.createdAt | date: 'MMM d, y, h:mm a' }}
+                </span>
+              </div>
+            </li>
+          } @empty {
+            <li class="current" style="--step: var(--ion-color-primary); --step-rgb: var(--ion-color-primary-rgb)">
+              <span class="node" aria-hidden="true"><ion-icon name="paper-plane-outline"></ion-icon></span>
+              <div class="step">
+                <strong>Submitted</strong>
+                <span class="step-meta">
+                  <span class="actor">You</span> · {{ report.createdAt | date: 'MMM d, y, h:mm a' }}
+                </span>
+              </div>
+            </li>
+          }
+        </ol>
+        @if (hasTechnicalEvents()) {
+          <ion-toggle
+            class="technical-toggle"
+            justify="space-between"
+            [checked]="showTechnical()"
+            (ionChange)="showTechnical.set($event.detail.checked)"
+          >
+            Show AI processing events
+          </ion-toggle>
+        }
+      </app-detail-card>
+    </div>
+
+    <!-- Full-screen image viewer -->
+    <ion-modal [isOpen]="viewerImage() !== null" (didDismiss)="closeImage()">
+      <ng-template>
+        <ion-header>
+          <ion-toolbar>
+            <ion-title>Photo</ion-title>
+            <ion-buttons slot="end">
+              <ion-button (click)="closeImage()">Close</ion-button>
+            </ion-buttons>
+          </ion-toolbar>
+        </ion-header>
+        <ion-content class="viewer">
+          @if (viewerImage(); as url) {
+            <img [src]="url" [alt]="'Photo for ' + report.reportNo" />
+          }
+        </ion-content>
+      </ng-template>
+    </ion-modal>
+  } @else if (error(); as failure) {
+    <app-empty-state
+      [fill]="true"
+      [icon]="failure.kind === 'OFFLINE' ? 'cloud-offline-outline' : 'alert-circle-outline'"
+      [title]="errorTitle(failure)"
+      [message]="failure.userMessage"
+    >
+      @if (failure.kind !== 'FORBIDDEN' && failure.kind !== 'NOT_FOUND') {
+        <ion-button fill="outline" (click)="retry()">Retry</ion-button>
+      }
+    </app-empty-state>
+  } @else {
+    <section class="content-container ion-padding" aria-busy="true" aria-label="Loading report">
+      <ion-skeleton-text [animated]="true" class="sk-image"></ion-skeleton-text>
+      <ion-skeleton-text [animated]="true" class="sk-title"></ion-skeleton-text>
+      <ion-skeleton-text [animated]="true"></ion-skeleton-text>
+      <ion-skeleton-text [animated]="true" class="sk-card"></ion-skeleton-text>
+      <ion-skeleton-text [animated]="true" class="sk-card"></ion-skeleton-text>
+    </section>
+  }
+</ion-content>

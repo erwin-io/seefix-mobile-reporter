@@ -1,0 +1,22 @@
+<ion-fab vertical="bottom" horizontal="end" class="report-fab">
+  <ion-fab-button
+    [class.unavailable]="!allowed()"
+    [attr.aria-disabled]="allowed() ? null : 'true'"
+    [attr.aria-label]="ariaLabel()"
+    (click)="onTap()"
+  >
+    @if (allowed()) {
+      <ion-icon name="add" aria-hidden="true"></ion-icon>
+    } @else {
+      <!-- Rotating "please wait" indicator: arc ring around an hourglass. -->
+      <svg class="waiting" viewBox="0 0 48 48" aria-hidden="true">
+        <circle class="track" cx="24" cy="24" r="18" />
+        <circle class="arc" cx="24" cy="24" r="18" />
+        <path
+          class="glass"
+          d="M18 14h12M18 34h12M19.5 14c0 5 9 7 9 10s-9 5-9 10M28.5 14c0 5-9 7-9 10s9 5 9 10"
+        />
+      </svg>
+    }
+  </ion-fab-button>
+</ion-fab>

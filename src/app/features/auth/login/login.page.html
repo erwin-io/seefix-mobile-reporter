@@ -1,0 +1,75 @@
+<ion-header class="no-shadow">
+  <ion-toolbar color="primary">
+    <ion-title>Sign in</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content class="ion-padding page">
+  <div class="wrap">
+    <ion-card class="card no-shadow">
+      <ion-card-header>
+        <ion-card-title>SEEFIX Reporter</ion-card-title>
+        <ion-card-subtitle>Sign in to <strong>report facility issues</strong> and follow their progress.</ion-card-subtitle>
+      </ion-card-header>
+
+      <ion-card-content>
+        @if (notice(); as message) {
+          <ion-note class="form-error notice" [color]="message.color" role="status">{{ message.text }}</ion-note>
+        }
+
+        <form [formGroup]="form" (ngSubmit)="submit()" novalidate class="fieldset">
+          <ion-input
+            formControlName="email"
+            type="email"
+            label="Email"
+            labelPlacement="stacked"
+            fill="outline"
+            placeholder="Enter your email"
+            autocomplete="email"
+            inputmode="email"
+            autocapitalize="off"
+            [spellcheck]="false"
+            [clearInput]="true"
+            errorText="Enter a valid email address"
+          ></ion-input>
+
+          <ion-input
+            formControlName="password"
+            type="password"
+            label="Password"
+            labelPlacement="stacked"
+            fill="outline"
+            placeholder="Enter your password"
+            autocomplete="current-password"
+            errorText="Password is required"
+          >
+            <ion-input-password-toggle slot="end"></ion-input-password-toggle>
+          </ion-input>
+
+          <div class="forgot-row">
+            <ion-button fill="clear" size="small" routerLink="/auth/forgot-password" routerDirection="forward">
+              Forgot password?
+            </ion-button>
+          </div>
+
+          @if (errorMessage(); as message) {
+            <ion-note class="form-error" color="danger" role="alert">{{ message }}</ion-note>
+          }
+
+          <ion-button class="regular" type="submit" expand="block" [disabled]="submitting()">
+            @if (submitting()) {
+              <ion-spinner name="dots" aria-label="Signing in"></ion-spinner>
+            } @else {
+              Sign in
+            }
+          </ion-button>
+        </form>
+
+        <div class="ion-text-center switch-link">
+          <ion-text color="medium">New to SEEFIX?</ion-text>
+          <ion-button fill="clear" routerLink="/auth/register" routerDirection="forward">Create an account</ion-button>
+        </div>
+      </ion-card-content>
+    </ion-card>
+  </div>
+</ion-content>

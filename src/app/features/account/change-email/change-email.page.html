@@ -1,0 +1,63 @@
+<ion-header class="no-shadow">
+  <ion-toolbar color="primary">
+    <ion-buttons slot="start">
+      <ion-back-button defaultHref="/tabs/profile"></ion-back-button>
+    </ion-buttons>
+    <ion-title>Change email</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content class="ion-padding">
+  <form [formGroup]="form" (ngSubmit)="send()" novalidate class="fieldset account-form">
+    @if (user(); as account) {
+      <p class="readonly-summary">
+        Current email ({{ account.emailVerified ? 'verified' : 'not verified' }})
+        <strong>{{ account.email }}</strong>
+      </p>
+    }
+    <ion-note class="form-notice">
+      We'll send a six-digit code to the new address. Your current email stays active until you confirm it.
+    </ion-note>
+
+    <ion-input
+      formControlName="newEmail"
+      type="email"
+      label="New email"
+      labelPlacement="stacked"
+      fill="outline"
+      placeholder="Enter your new email"
+      autocomplete="email"
+      inputmode="email"
+      autocapitalize="off"
+      [clearInput]="true"
+      errorText="Enter a valid email address"
+    ></ion-input>
+
+    <ion-input
+      formControlName="currentPassword"
+      type="password"
+      label="Current password"
+      labelPlacement="stacked"
+      fill="outline"
+      placeholder="Enter your current password"
+      autocomplete="current-password"
+      errorText="Current password is required"
+    >
+      <ion-input-password-toggle slot="end"></ion-input-password-toggle>
+    </ion-input>
+
+    @if (errorMessage(); as message) {
+      <ion-note class="form-error" color="danger" role="alert">{{ message }}</ion-note>
+    }
+
+    <ion-button class="regular" type="submit" expand="block" [disabled]="sending() || cooldown.seconds() > 0">
+      @if (sending()) {
+        <ion-spinner name="dots" aria-label="Sending code"></ion-spinner>
+      } @else if (cooldown.seconds() > 0) {
+        Send code again in {{ cooldown.seconds() }}s
+      } @else {
+        Send verification code
+      }
+    </ion-button>
+  </form>
+</ion-content>

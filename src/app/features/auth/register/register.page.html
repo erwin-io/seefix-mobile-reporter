@@ -1,0 +1,104 @@
+<ion-header class="no-shadow">
+  <ion-toolbar color="primary">
+    <ion-buttons slot="start">
+      <ion-back-button defaultHref="/auth/login"></ion-back-button>
+    </ion-buttons>
+    <ion-title>Create account</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content class="ion-padding page">
+  <div class="wrap">
+    <ion-card class="card no-shadow">
+      <ion-card-header>
+        <ion-card-title>Create your Reporter account</ion-card-title>
+        <ion-card-subtitle>Use it to report facility issues and get updates.</ion-card-subtitle>
+      </ion-card-header>
+
+      <ion-card-content>
+        <form [formGroup]="form" (ngSubmit)="submit()" novalidate class="fieldset">
+          <ion-input
+            formControlName="fullName"
+            label="Full name"
+            labelPlacement="stacked"
+            fill="outline"
+            placeholder="Enter your full name"
+            autocomplete="name"
+            autocapitalize="words"
+            [clearInput]="true"
+            errorText="Full name is required"
+          ></ion-input>
+
+          <ion-input
+            formControlName="email"
+            type="email"
+            label="Email"
+            labelPlacement="stacked"
+            fill="outline"
+            placeholder="Enter your email"
+            autocomplete="email"
+            inputmode="email"
+            autocapitalize="off"
+            [clearInput]="true"
+            helperText="We'll send a six-digit code to verify it"
+            errorText="Enter a valid email address"
+          ></ion-input>
+
+          <ion-input
+            formControlName="phone"
+            type="tel"
+            label="Phone (optional)"
+            labelPlacement="stacked"
+            fill="outline"
+            placeholder="Enter your phone number"
+            autocomplete="tel"
+            inputmode="tel"
+            [clearInput]="true"
+          ></ion-input>
+
+          <ion-input
+            formControlName="password"
+            type="password"
+            label="Password"
+            labelPlacement="stacked"
+            fill="outline"
+            placeholder="Create a password"
+            autocomplete="new-password"
+            helperText="At least 8 characters"
+            [errorText]="passwordErrorText(form.controls.password)"
+          >
+            <ion-input-password-toggle slot="end"></ion-input-password-toggle>
+          </ion-input>
+
+          <ion-input
+            formControlName="confirmPassword"
+            type="password"
+            label="Confirm password"
+            labelPlacement="stacked"
+            fill="outline"
+            placeholder="Re-enter your password"
+            autocomplete="new-password"
+            errorText="Confirm your password"
+          >
+            <ion-input-password-toggle slot="end"></ion-input-password-toggle>
+          </ion-input>
+
+          @if (mismatch) {
+            <ion-note class="form-error" color="danger" role="alert">Passwords don't match.</ion-note>
+          }
+          @if (errorMessage(); as message) {
+            <ion-note class="form-error" color="danger" role="alert">{{ message }}</ion-note>
+          }
+
+          <ion-button class="regular" type="submit" expand="block" [disabled]="submitting()">
+            @if (submitting()) {
+              <ion-spinner name="dots" aria-label="Creating account"></ion-spinner>
+            } @else {
+              Create account
+            }
+          </ion-button>
+        </form>
+      </ion-card-content>
+    </ion-card>
+  </div>
+</ion-content>

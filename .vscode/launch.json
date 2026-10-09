@@ -1,0 +1,25 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    // Based on: https://github.com/microsoft/vscode-recipes/tree/master/Angular-CLI
+    {
+      "name": "Launch ng serve & Chrome",
+      "type": "pwa-chrome",
+      "request": "launch",
+      "preLaunchTask": "npm: ionic_serve",
+      "url": "http://localhost:8100/",
+
+      // Note: The ./client directory
+      "webRoot": "${workspaceFolder}",
+
+      "sourceMaps": true,
+      "sourceMapPathOverrides": {
+        "webpack:/*": "${webRoot}/*",
+        "/./*": "${webRoot}/*",
+        "/src/*": "${webRoot}/*",
+        "/*": "*",
+        "/./~/*": "${webRoot}/node_modules/*"
+      }
+    },
+  ]
+}

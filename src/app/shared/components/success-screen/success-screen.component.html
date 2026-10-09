@@ -1,0 +1,19 @@
+<ion-content class="ion-padding">
+  <div class="success" role="status" aria-live="polite">
+    <div class="badge">
+      <ion-icon [name]="icon()" color="success" aria-hidden="true"></ion-icon>
+    </div>
+    <h1>{{ title() }}</h1>
+    @if (message(); as text) {
+      <p>{{ text }}</p>
+    }
+  </div>
+</ion-content>
+
+<ion-footer class="no-shadow">
+  <ion-toolbar>
+    <div class="actions">
+      <ion-button class="regular" expand="block" (click)="done()">{{ actionText() }}</ion-button>
+    </div>
+  </ion-toolbar>
+</ion-footer>

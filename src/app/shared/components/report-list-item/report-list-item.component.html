@@ -1,0 +1,17 @@
+<ion-item button [detail]="true" [lines]="lines()" (click)="open()">
+  <ion-thumbnail slot="start">
+    @if (report().thumbnailUrl; as url) {
+      <ion-img [src]="url" [alt]="'Photo for report ' + report().reportNo"></ion-img>
+    } @else {
+      <div class="thumb-placeholder"><ion-icon name="image-outline" aria-hidden="true"></ion-icon></div>
+    }
+  </ion-thumbnail>
+  <ion-label>
+    <h2>{{ report().reportNo }}</h2>
+    <app-report-status-chip [status]="report().status"></app-report-status-chip>
+    @if (report().locationText; as location) {
+      <p>{{ location }}</p>
+    }
+    <p>{{ report().createdAt | date: 'MMM d, y, h:mm a' }}</p>
+  </ion-label>
+</ion-item>

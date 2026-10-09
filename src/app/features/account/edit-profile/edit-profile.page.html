@@ -1,0 +1,57 @@
+<ion-header class="no-shadow">
+  <ion-toolbar color="primary">
+    <ion-buttons slot="start">
+      <ion-back-button defaultHref="/tabs/profile"></ion-back-button>
+    </ion-buttons>
+    <ion-title>Edit profile</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content class="ion-padding">
+  <form [formGroup]="form" (ngSubmit)="save()" novalidate class="fieldset account-form">
+    <ion-input
+      formControlName="fullName"
+      label="Full name"
+      labelPlacement="stacked"
+      fill="outline"
+      placeholder="Enter your full name"
+      autocomplete="name"
+      autocapitalize="words"
+      [clearInput]="true"
+      errorText="Full name is required (2–200 characters)"
+    ></ion-input>
+
+    <ion-input
+      formControlName="phone"
+      type="tel"
+      label="Phone (optional)"
+      labelPlacement="stacked"
+      fill="outline"
+      placeholder="Enter your phone number"
+      autocomplete="tel"
+      inputmode="tel"
+      [clearInput]="true"
+      errorText="Phone must be at most 50 characters"
+    ></ion-input>
+
+    @if (user(); as account) {
+      <p class="readonly-summary">
+        Email
+        <strong>{{ account.email }}</strong>
+      </p>
+      <ion-note class="form-notice">Change your email or password from the Profile tab.</ion-note>
+    }
+
+    @if (errorMessage(); as message) {
+      <ion-note class="form-error" color="danger" role="alert">{{ message }}</ion-note>
+    }
+
+    <ion-button class="regular" type="submit" expand="block" [disabled]="saving()">
+      @if (saving()) {
+        <ion-spinner name="dots" aria-label="Saving"></ion-spinner>
+      } @else {
+        Save changes
+      }
+    </ion-button>
+  </form>
+</ion-content>

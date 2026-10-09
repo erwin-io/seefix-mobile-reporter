@@ -1,0 +1,90 @@
+<ion-header class="no-shadow">
+  <ion-toolbar color="primary">
+    <ion-buttons slot="start">
+      <ion-back-button defaultHref="/auth/login"></ion-back-button>
+    </ion-buttons>
+    <ion-title>Verify email</ion-title>
+  </ion-toolbar>
+</ion-header>
+
+<ion-content class="ion-padding auth-page">
+  <div class="auth-wrap">
+    <ion-card class="auth-card no-shadow">
+      <ion-card-header>
+        <ion-card-title>Check your email</ion-card-title>
+        <ion-card-subtitle>
+          @if (knownEmail) {
+            Enter the six-digit code we sent to <strong>{{ knownEmail }}</strong>. It expires in 10 minutes.
+          } @else {
+            Enter your account email and the six-digit code from your verification email.
+          }
+        </ion-card-subtitle>
+      </ion-card-header>
+
+      <ion-card-content>
+        @if (deliveryFailed()) {
+          <ion-note class="form-notice" color="warning" role="status">
+            Your account was created, but we couldn't send the code. Use "Resend code" in a minute.
+          </ion-note>
+        }
+
+        <form [formGroup]="form" (ngSubmit)="verify()" novalidate class="fieldset">
+          @if (!knownEmail) {
+            <ion-input
+              formControlName="email"
+              type="email"
+              label="Email"
+              labelPlacement="stacked"
+              fill="outline"
+              placeholder="Enter your account email"
+              autocomplete="email"
+              inputmode="email"
+              autocapitalize="off"
+              errorText="Enter a valid email address"
+            ></ion-input>
+          }
+
+          <ion-input
+            class="otp-input"
+            formControlName="code"
+            type="text"
+            label="Verification code"
+            labelPlacement="stacked"
+            fill="outline"
+            placeholder="000000"
+            inputmode="numeric"
+            autocomplete="one-time-code"
+            [maxlength]="6"
+            (ionInput)="onCodeInput($event.detail.value)"
+            errorText="Enter the six-digit code"
+          ></ion-input>
+
+          @if (errorMessage(); as message) {
+            <ion-note class="form-error" color="danger" role="alert">{{ message }}</ion-note>
+          }
+
+          <ion-button class="regular" type="submit" expand="block" [disabled]="submitting()">
+            @if (submitting()) {
+              <ion-spinner name="dots" aria-label="Verifying"></ion-spinner>
+            } @else {
+              Verify email
+            }
+          </ion-button>
+        </form>
+
+        <div class="link-row">
+          <ion-button fill="clear" (click)="resend()" [disabled]="resending() || cooldown.seconds() > 0">
+            @if (cooldown.seconds() > 0) {
+              Resend code in {{ cooldown.seconds() }}s
+            } @else if (codeExpired()) {
+              Send a new code
+            } @else {
+              Resend code
+            }
+          </ion-button>
+          <ion-button fill="clear" color="medium" (click)="backToLogin()">Back to sign in</ion-button>
+        </div>
+      </ion-card-content>
+    </ion-card>
+  </div>
+</ion-content>
