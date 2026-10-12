@@ -1,15 +1,10 @@
 // Development environment. Public URLs only — never credentials or API keys.
-//
-// - Browser (`npm start`): `apiBaseUrl` is empty so requests go to the same
-//   origin and `proxy.conf.json` forwards `/api` to http://127.0.0.1:3000.
-// - Android emulator: 10.0.2.2 reaches the host PC's loopback.
-// - Physical device: replace `nativeApiBaseUrl` with the PC's LAN IP
-//   (e.g. http://192.168.1.20:3000) and bind seefix-api to a reachable interface.
+// `npm start` calls a local seefix-api directly: add this app's origin (http://localhost:4200) to the API's
+// CORS_ORIGINS. Native builds (Android) use environment.prod.ts.
 
 export const environment = {
   production: false,
-  apiBaseUrl: '',
-  nativeApiBaseUrl: 'http://10.0.2.2:3000',
+  apiBaseUrl: 'http://localhost:3000',
   requestTimeoutMs: 20000,
   uploadTimeoutMs: 120000,
   agentPollIntervalMs: 12000,

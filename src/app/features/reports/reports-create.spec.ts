@@ -4,6 +4,7 @@ import { TestBed } from '@angular/core/testing';
 import { firstValueFrom } from 'rxjs';
 import { normalizeImage } from './new-report/photo-picker.service';
 import { ReportsApiService } from './reports.api.service';
+import { apiUrl } from '../../testing/test-helpers';
 
 const UPLOAD_URL = 'https://api.cloudinary.com/v1_1/demo/image/upload';
 
@@ -34,7 +35,7 @@ describe('Report creation with direct uploads', () => {
       }),
     );
 
-    const sign = httpMock.expectOne('/api/uploads/sign');
+    const sign = httpMock.expectOne(apiUrl('/api/uploads/sign'));
     expect(sign.request.body).toEqual({ purpose: 'report-image' });
     sign.flush({ uploadUrl: UPLOAD_URL, fields: { timestamp: 1, signature: 'sig', api_key: 'k' } });
 
@@ -47,7 +48,7 @@ describe('Report creation with direct uploads', () => {
       upload.flush({ public_id: id });
     }
 
-    const report = httpMock.expectOne('/api/reports');
+    const report = httpMock.expectOne(apiUrl('/api/reports'));
     expect(report.request.body).toEqual({
       imagePublicIds: ['img-a', 'img-b'],
       description: 'Leaking pipe',
@@ -65,7 +66,7 @@ describe('Report creation with direct uploads', () => {
 
   it('does not create the report when an upload fails', async () => {
     const created = firstValueFrom(api.create({ images: [{ blob: new Blob(['a']), fileName: 'a.jpg' }], description: 'x' }));
-    httpMock.expectOne('/api/uploads/sign').flush({ uploadUrl: UPLOAD_URL, fields: {} });
+    httpMock.expectOne(apiUrl('/api/uploads/sign')).flush({ uploadUrl: UPLOAD_URL, fields: {} });
     httpMock.expectOne(UPLOAD_URL).flush({ error: { message: 'bad' } }, { status: 400, statusText: 'Bad Request' });
     await expect(created).rejects.toBeTruthy();
     httpMock.expectNone('/api/reports');

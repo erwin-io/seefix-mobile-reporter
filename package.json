@@ -13,7 +13,6 @@
     "lint": "ng lint",
     "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.spec.json --noEmit",
     "cap:sync": "ng build && npx cap sync android",
-    "cap:sync:local": "ng build --configuration development && node scripts/cap-sync-local.mjs",
     "cap:open": "npx cap open android"
   },
   "private": true,

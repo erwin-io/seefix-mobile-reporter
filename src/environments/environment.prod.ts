@@ -1,10 +1,9 @@
 // Production environment. HTTPS public API origin only — never credentials.
-// The approved production API host must be supplied before release.
+// The Android app runs at https://localhost (Capacitor), so that origin must be in the API's CORS_ORIGINS.
 
 export const environment = {
   production: true,
-  apiBaseUrl: 'https://REPLACE-WITH-APPROVED-API-HOST',
-  nativeApiBaseUrl: 'https://REPLACE-WITH-APPROVED-API-HOST',
+  apiBaseUrl: 'https://seefix-api.vercel.app',
   requestTimeoutMs: 20000,
   uploadTimeoutMs: 120000,
   agentPollIntervalMs: 12000,
