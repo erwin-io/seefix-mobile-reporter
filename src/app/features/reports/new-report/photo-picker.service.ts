@@ -3,7 +3,6 @@ import { Camera, EncodingType, MediaResult, MediaTypeSelection } from '@capacito
 import { APP_ENVIRONMENT } from '../../../core/config/app-environment';
 
 export const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
-const MAX_EDGE_PX = 2560;
 
 export interface SelectedPhoto {
   id: string;
@@ -29,8 +28,9 @@ export interface GalleryOutcome {
 /**
  * Camera / gallery capture via @capacitor/camera 8 (`takePhoto`, `chooseFromGallery`).
  * On the web the plugin falls back to a standard file picker.
- * Output is always JPEG/PNG/WebP within the upload size limit; HEIC/HEIF and
- * oversized images are re-encoded to JPEG where the platform can decode them.
+ * Output is always JPEG/PNG/WebP within the size limit (`maxUploadMb`). Photos are never resized or
+ * re-compressed (image quality matters for the AI assessment): HEIC/HEIF is converted to full-size JPEG
+ * where the platform can decode it, and anything over the limit is rejected.
  */
 @Injectable({ providedIn: 'root' })
 export class PhotoPickerService {
@@ -121,40 +121,32 @@ async function readMediaBlob(result: MediaResult): Promise<Blob> {
 
 export class ImageRejectedError extends Error {}
 
-/** Keeps accepted images as-is; re-encodes anything else (or too large) to JPEG. */
+/** Keeps accepted images as-is; converts other formats to full-size JPEG. Rejects anything over maxBytes. */
 export async function normalizeImage(blob: Blob, maxBytes: number): Promise<Blob> {
   const accepted = (ACCEPTED_IMAGE_TYPES as readonly string[]).includes(blob.type);
-  if (accepted && blob.size <= maxBytes) return blob;
+  const image = accepted ? blob : await toJpeg(blob);
+  if (image.size > maxBytes) throw new ImageRejectedError('Image is too large.');
+  return image;
+}
 
+async function toJpeg(blob: Blob): Promise<Blob> {
   let bitmap: ImageBitmap;
   try {
     bitmap = await createImageBitmap(blob);
   } catch {
     throw new ImageRejectedError('Unsupported image format.');
   }
-
   try {
-    for (const [edge, quality] of [
-      [MAX_EDGE_PX, 0.85],
-      [2048, 0.75],
-      [1600, 0.7],
-    ] as const) {
-      const encoded = await encodeJpeg(bitmap, edge, quality);
-      if (encoded && encoded.size <= maxBytes) return encoded;
-    }
+    const canvas = document.createElement('canvas');
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const context = canvas.getContext('2d');
+    if (!context) throw new ImageRejectedError('Unsupported image format.');
+    context.drawImage(bitmap, 0, 0);
+    const jpeg = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.95));
+    if (!jpeg) throw new ImageRejectedError('Unsupported image format.');
+    return jpeg;
   } finally {
     bitmap.close();
   }
-  throw new ImageRejectedError('Image is too large.');
-}
-
-function encodeJpeg(bitmap: ImageBitmap, maxEdge: number, quality: number): Promise<Blob | null> {
-  const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.round(bitmap.width * scale);
-  canvas.height = Math.round(bitmap.height * scale);
-  const context = canvas.getContext('2d');
-  if (!context) return Promise.resolve(null);
-  context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-  return new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
 }
