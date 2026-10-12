@@ -3,7 +3,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { TestBed } from '@angular/core/testing';
 import { SessionStore } from '../../core/auth/session.store';
 import { NotificationDto } from '../../core/models/notification.model';
-import { REPORTER_USER, flushAsync } from '../../testing/test-helpers';
+import { REPORTER_USER, flushAsync, apiUrl } from '../../testing/test-helpers';
 import { NotificationsStore } from './notifications.store';
 
 const item = (id: string, isRead: boolean): NotificationDto => ({
@@ -32,7 +32,7 @@ describe('NotificationsStore', () => {
     httpMock = TestBed.inject(HttpTestingController);
 
     const loaded = store.refresh();
-    httpMock.expectOne('/api/notifications').flush({ items: [item('a', false), item('b', true), item('c', false)] });
+    httpMock.expectOne(apiUrl('/api/notifications')).flush({ items: [item('a', false), item('b', true), item('c', false)] });
     await loaded;
   });
 
@@ -45,7 +45,7 @@ describe('NotificationsStore', () => {
   it('marks one read after server confirmation (NOTIF-02)', async () => {
     const done = store.markRead('a');
     await flushAsync();
-    httpMock.expectOne('/api/notifications/a/read').flush({ id: 'a', isRead: true, readAt: '2026-10-09T01:00:00Z' });
+    httpMock.expectOne(apiUrl('/api/notifications/a/read')).flush({ id: 'a', isRead: true, readAt: '2026-10-09T01:00:00Z' });
     await done;
     expect(store.unreadCount()).toBe(1);
   });
@@ -53,13 +53,13 @@ describe('NotificationsStore', () => {
   it('keeps unread state when read-all fails, then clears it on success (NOTIF-03)', async () => {
     const failed = store.markAllRead();
     await flushAsync();
-    httpMock.expectOne('/api/notifications/read-all').flush({}, { status: 500, statusText: 'Server Error' });
+    httpMock.expectOne(apiUrl('/api/notifications/read-all')).flush({}, { status: 500, statusText: 'Server Error' });
     await expect(failed).rejects.toBeTruthy();
     expect(store.unreadCount()).toBe(2);
 
     const ok = store.markAllRead();
     await flushAsync();
-    httpMock.expectOne('/api/notifications/read-all').flush({ updated: 2 });
+    httpMock.expectOne(apiUrl('/api/notifications/read-all')).flush({ updated: 2 });
     await ok;
     expect(store.unreadCount()).toBe(0);
   });

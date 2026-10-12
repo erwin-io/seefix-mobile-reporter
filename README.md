@@ -24,28 +24,33 @@ Implementation contract: `SEEFIX-MOBILE-REPORTER-DESIGN-001` (Reporter Mobile Ap
 
 ```bash
 npm install
-npm start            # http://localhost:4200 (or --port 8100); /api is proxied to http://127.0.0.1:3000
+npm start            # http://localhost:4200, calls the API at http://localhost:3000
 npm run test:ci      # unit tests (run once)
 npm run lint
 npm run typecheck
 ```
 
-In the browser, `/api` goes through `proxy.conf.json`, so `seefix-api` needs no CORS change. On the web the JWT is kept
-in memory only, so reloading the page signs you out (this is intentional).
+The app calls `apiBaseUrl` from `src/environments/` directly (no proxy):
+
+| Build | File | `apiBaseUrl` |
+|---|---|---|
+| `npm start` (development) | `environment.ts` | `http://localhost:3000` (local seefix-api) |
+| `npm run build`, Android | `environment.prod.ts` | `https://seefix-api.vercel.app` |
+
+Because the app and the API are on different origins, the API must allow the app's origin in `CORS_ORIGINS`:
+`http://localhost:4200` for the local API, and `https://localhost` (the Android app's origin) for production.
+On the web the JWT is kept in memory only, so reloading the page signs you out (this is intentional).
 
 ### Android
 
 ```bash
-npm run cap:sync:local   # dev build + sync with cleartext HTTP allowed (local testing only)
-npm run cap:open         # opens Android Studio
+npm run cap:sync   # production build + Android sync (uses environment.prod.ts)
+npm run cap:open   # opens Android Studio
 ```
 
 - **JDK 21 is required** (Capacitor 8). Android Studio uses its bundled JBR. For command-line builds, run
   `$env:JAVA_HOME="C:\Program Files\Android\Android Studio\jbr"; cd android; .\gradlew.bat assembleDebug` in PowerShell.
-- **Emulator:** `nativeApiBaseUrl` in `src/environments/environment.ts` defaults to `http://10.0.2.2:3000` (the host PC).
-- **Physical phone:** set `nativeApiBaseUrl` to your PC's LAN IP (e.g. `http://192.168.1.20:3000`). Then start
-  seefix-api with `API_HOST=0.0.0.0` and allow port 3000 through the Windows firewall on the private network only.
-- `npm run cap:sync` (no `:local`) syncs **without** cleartext/mixed content. Use it for anything that is not local testing.
+- The Android app (emulator or phone) talks to the production API over HTTPS; no LAN or cleartext setup is needed.
 - iOS builds need macOS/Xcode (`npx cap add ios` there).
 
 ## Structure

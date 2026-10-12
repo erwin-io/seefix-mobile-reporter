@@ -2,6 +2,10 @@ import { Provider } from '@angular/core';
 import { NavController } from '@ionic/angular';
 import { vi } from 'vitest';
 import { AuthUser } from '../core/models/auth.model';
+import { environment } from '../../environments/environment';
+
+/** The full URL the app calls for an API path (tests run with the development environment). */
+export const apiUrl = (path: string): string => `${environment.apiBaseUrl}${path}`;
 
 /** Legacy-style Reporter: unverified email that is not required to verify (may sign in). */
 export const REPORTER_USER: AuthUser = {

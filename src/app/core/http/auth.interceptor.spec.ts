@@ -4,7 +4,7 @@ import { TestBed } from '@angular/core/testing';
 import { vi } from 'vitest';
 import { AuthService } from '../auth/auth.service';
 import { SessionStore } from '../auth/session.store';
-import { REPORTER_USER, apiError, provideNavControllerStub } from '../../testing/test-helpers';
+import { REPORTER_USER, apiError, provideNavControllerStub, apiUrl } from '../../testing/test-helpers';
 import { authErrorInterceptor } from './auth-error.interceptor';
 import { authInterceptor, isOwnApiRequest } from './auth.interceptor';
 
@@ -31,13 +31,13 @@ describe('auth interceptors', () => {
   afterEach(() => httpMock.verify());
 
   function failWith(url: string, status: number, code: string): void {
-    http.get(url).subscribe({ error: () => undefined });
-    httpMock.expectOne(url).flush(apiError(code), { status, statusText: 'Error' });
+    http.get(apiUrl(url)).subscribe({ error: () => undefined });
+    httpMock.expectOne(apiUrl(url)).flush(apiError(code), { status, statusText: 'Error' });
   }
 
   it('adds the bearer token to seefix-api requests', () => {
-    http.get('/api/reports/my').subscribe();
-    const req = httpMock.expectOne('/api/reports/my');
+    http.get(apiUrl('/api/reports/my')).subscribe();
+    const req = httpMock.expectOne(apiUrl('/api/reports/my'));
     expect(req.request.headers.get('Authorization')).toBe('Bearer jwt-token');
     req.flush({ items: [] });
   });

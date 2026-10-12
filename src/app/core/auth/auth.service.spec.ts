@@ -12,6 +12,7 @@ import {
   flushAsync,
   navControllerStub,
   provideNavControllerStub,
+  apiUrl,
 } from '../../testing/test-helpers';
 import { AuthFlowStore } from './auth-flow.store';
 import { AuthService } from './auth.service';
@@ -46,7 +47,7 @@ describe('AuthService', () => {
 
   async function expectMe(): Promise<ReturnType<HttpTestingController['expectOne']>> {
     await flushAsync();
-    return httpMock.expectOne('/api/auth/me');
+    return httpMock.expectOne(apiUrl('/api/auth/me'));
   }
 
   async function bootstrapWith(token: string, respond: (req: ReturnType<HttpTestingController['expectOne']>) => void) {
@@ -110,7 +111,7 @@ describe('AuthService', () => {
     async function loginFlow(identifier: string): Promise<{ loginBody: unknown; result: Promise<unknown> }> {
       const result = auth.login({ identifier, password: 'secret-pass' });
       await flushAsync();
-      const req = httpMock.expectOne('/api/auth/login');
+      const req = httpMock.expectOne(apiUrl('/api/auth/login'));
       expect(req.request.headers.has('Authorization')).toBe(false);
       const loginBody = req.request.body;
       req.flush({ user: REPORTER_USER, accessToken: 'new-token' });
@@ -136,7 +137,7 @@ describe('AuthService', () => {
       const result = auth.login({ identifier: 'new@example.test', password: 'secret-pass' });
       await flushAsync();
       httpMock
-        .expectOne('/api/auth/login')
+        .expectOne(apiUrl('/api/auth/login'))
         .flush(apiError('EMAIL_VERIFICATION_REQUIRED'), { status: 403, statusText: 'Forbidden' });
       await expect(result).rejects.toMatchObject({ kind: 'VERIFICATION_REQUIRED' });
       expect(await storage.get()).toBeNull();
@@ -146,7 +147,7 @@ describe('AuthService', () => {
     it('surfaces invalid credentials without a session (AUTH-09)', async () => {
       const result = auth.login({ identifier: 'reporter@example.test', password: 'wrong' });
       await flushAsync();
-      httpMock.expectOne('/api/auth/login').flush(apiError('INVALID_CREDENTIALS'), { status: 401, statusText: 'x' });
+      httpMock.expectOne(apiUrl('/api/auth/login')).flush(apiError('INVALID_CREDENTIALS'), { status: 401, statusText: 'x' });
       await expect(result).rejects.toMatchObject({ kind: 'UNAUTHORIZED', userMessage: 'Incorrect email or password.' });
       expect(nav.navigateRoot).not.toHaveBeenCalled();
     });
@@ -154,7 +155,7 @@ describe('AuthService', () => {
     it('denies non-Reporter accounts without storing a token (AUTH-13)', async () => {
       const result = auth.login({ identifier: 'staff@example.test', password: 'secret-pass' });
       await flushAsync();
-      httpMock.expectOne('/api/auth/login').flush({ user: STAFF_USER, accessToken: 'staff-token' });
+      httpMock.expectOne(apiUrl('/api/auth/login')).flush({ user: STAFF_USER, accessToken: 'staff-token' });
       await expect(result).rejects.toBeInstanceOf(AppError);
       await expect(result).rejects.toMatchObject({ kind: 'ROLE_DENIED' });
       expect(await storage.get()).toBeNull();
@@ -164,7 +165,7 @@ describe('AuthService', () => {
   it('registration never signs in or stores a token (AUTH-02)', async () => {
     const result = auth.register({ fullName: 'New Reporter', email: 'new@example.test', password: 'secret-pass' });
     await flushAsync();
-    const req = httpMock.expectOne('/api/auth/register');
+    const req = httpMock.expectOne(apiUrl('/api/auth/register'));
     expect(req.request.headers.has('Authorization')).toBe(false);
     req.flush(
       { user: { ...REPORTER_USER, emailVerificationRequired: true }, emailVerificationRequired: true, message: 'ok' },
