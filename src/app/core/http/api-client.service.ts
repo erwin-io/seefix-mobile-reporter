@@ -46,13 +46,6 @@ export class ApiClient {
       .pipe(this.normalize<T>(options.timeoutMs ?? this.env.requestTimeoutMs));
   }
 
-  /** Multipart POST. The browser/WebView sets the multipart boundary header. */
-  postForm<T>(path: string, form: FormData, options: ApiRequestOptions = {}): Observable<T> {
-    return this.http
-      .post<T>(this.url(path), form, { context: options.context })
-      .pipe(this.normalize<T>(options.timeoutMs ?? this.env.uploadTimeoutMs));
-  }
-
   private normalize<T>(ms: number) {
     return (source: Observable<T>) =>
       source.pipe(

@@ -1,6 +1,7 @@
 import { Injectable, inject } from '@angular/core';
-import { Observable, map } from 'rxjs';
+import { Observable, map, switchMap } from 'rxjs';
 import { ApiClient } from '../../core/http/api-client.service';
+import { DirectUploadService } from '../../core/http/direct-upload.service';
 import {
   ActiveReportResponse,
   AgentStatusResponse,
@@ -30,6 +31,7 @@ export interface NewReportPayload {
 @Injectable({ providedIn: 'root' })
 export class ReportsApiService {
   private readonly api = inject(ApiClient);
+  private readonly uploads = inject(DirectUploadService);
 
   /** Newest first. The endpoint has no pagination; `limit` is capped at 100. */
   listMine(limit: number, status?: string): Observable<ReportSummary[]> {
@@ -60,28 +62,28 @@ export class ReportsApiService {
     return this.api.get<AgentStatusResponse>(`/api/reports/${encodeURIComponent(id)}/agent-status`);
   }
 
+  /** Uploads the photos straight to Cloudinary, then creates the report with their public IDs. */
   create(payload: NewReportPayload): Observable<CreateReportResponse> {
-    const form = new FormData();
-    for (const image of payload.images) form.append('images', image.blob, image.fileName);
-    appendIfPresent(form, 'description', payload.description);
-    appendIfPresent(form, 'notes', payload.notes);
-    if (payload.locationId) {
-      // Node replaces textual location with the canonical facility snapshot.
-      form.append('locationId', payload.locationId);
-    } else {
-      appendIfPresent(form, 'building', payload.building);
-      appendIfPresent(form, 'floor', payload.floor);
-      appendIfPresent(form, 'roomOrArea', payload.roomOrArea);
-    }
-    if (payload.gpsLat != null && payload.gpsLng != null) {
-      form.append('gpsLat', String(payload.gpsLat));
-      form.append('gpsLng', String(payload.gpsLng));
-    }
-    return this.api.postForm<CreateReportResponse>('/api/reports', form);
+    return this.uploads.upload('report-image', payload.images).pipe(
+      switchMap((imagePublicIds) => {
+        const useLocationId = !!payload.locationId; // Node replaces textual location with the canonical facility snapshot.
+        const hasGps = payload.gpsLat != null && payload.gpsLng != null;
+        return this.api.post<CreateReportResponse>('/api/reports', {
+          imagePublicIds,
+          description: trimmed(payload.description),
+          notes: trimmed(payload.notes),
+          locationId: useLocationId ? payload.locationId : undefined,
+          building: useLocationId ? undefined : trimmed(payload.building),
+          floor: useLocationId ? undefined : trimmed(payload.floor),
+          roomOrArea: useLocationId ? undefined : trimmed(payload.roomOrArea),
+          gpsLat: hasGps ? payload.gpsLat : undefined,
+          gpsLng: hasGps ? payload.gpsLng : undefined,
+        });
+      }),
+    );
   }
 }
 
-function appendIfPresent(form: FormData, key: string, value: string | null | undefined): void {
-  const text = value?.trim();
-  if (text) form.append(key, text);
+function trimmed(value: string | null | undefined): string | undefined {
+  return value?.trim() || undefined;
 }
