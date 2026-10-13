@@ -16,7 +16,7 @@ import {
 } from '../../testing/test-helpers';
 import { LocalDbService } from '../storage/local-db.service';
 import { AuthFlowStore } from './auth-flow.store';
-import { AuthService } from './auth.service';
+import { AuthService, LocalDataNotDeletedError } from './auth.service';
 import { SecureTokenStorage } from './secure-token-storage.service';
 import { SessionStore } from './session.store';
 
@@ -301,6 +301,32 @@ describe('AuthService', () => {
       session.setAuthenticated(REPORTER_USER, 'next-token');
       await auth.logout();
       expect(await localDb.keys(REPORTER_USER.id)).toEqual([]);
+    });
+
+    it('if deleting the on-device data fails, sign-out stops and nothing changes', async () => {
+      await storage.set('token');
+      session.setAuthenticated(REPORTER_USER, 'token');
+      await localDb.putAll(REPORTER_USER.id, [{ key: 'outbox/1', value: 'unsent' }]);
+      vi.spyOn(localDb, 'wipeUser').mockRejectedValueOnce(new Error('IndexedDB unavailable'));
+
+      await expect(auth.logout()).rejects.toBeInstanceOf(LocalDataNotDeletedError);
+
+      expect(session.state()).toBe('AUTHENTICATED');
+      expect(await storage.get()).toBe('token');
+      expect(await localDb.keys(REPORTER_USER.id)).toEqual(['outbox/1']);
+      expect(nav.navigateRoot).not.toHaveBeenCalled();
+    });
+
+    it('"Log out anyway" signs out and keeps the data for this Reporter only', async () => {
+      await storage.set('token');
+      session.setAuthenticated(REPORTER_USER, 'token');
+      await localDb.putAll(REPORTER_USER.id, [{ key: 'outbox/1', value: 'unsent' }]);
+
+      await auth.logout({ keepLocalData: true });
+
+      expect(session.state()).toBe('UNAUTHENTICATED');
+      expect(await storage.get()).toBeNull();
+      expect(await localDb.keys(REPORTER_USER.id)).toEqual(['outbox/1']);
     });
 
     it('another Reporter signing in never sees the previous Reporter’s data', async () => {

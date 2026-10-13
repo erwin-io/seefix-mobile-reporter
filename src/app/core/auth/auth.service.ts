@@ -15,6 +15,11 @@ import { VerifiedIdentityStore } from './verified-identity.store';
 
 export const REPORTER_ROLE = 'REPORTER';
 
+/** Signing out could not delete this Reporter's data on the phone; the session is unchanged. */
+export class LocalDataNotDeletedError extends Error {
+  override readonly name = 'LocalDataNotDeletedError';
+}
+
 /** Session lifecycle: sign-in, bootstrap, sign-out and forced re-authentication. */
 @Injectable({ providedIn: 'root' })
 export class AuthService {
@@ -99,7 +104,20 @@ export class AuthService {
     return this.reverifyPromise;
   }
 
-  async logout(): Promise<void> {
+  /**
+   * Deliberate sign-out. Deletes this Reporter's data on the phone first, while still signed in. If that fails,
+   * nothing changes and LocalDataNotDeletedError is thrown, unless `keepLocalData` (the Reporter chose "Log out
+   * anyway"): the data then stays, unreadable until this Reporter signs in again.
+   */
+  async logout(options: { keepLocalData?: boolean } = {}): Promise<void> {
+    const userId = this.session.user()?.id;
+    if (userId && !options.keepLocalData) {
+      try {
+        await this.localDb.wipeUser(userId);
+      } catch {
+        throw new LocalDataNotDeletedError();
+      }
+    }
     await this.endSession('SIGNED_OUT');
   }
 
@@ -125,12 +143,10 @@ export class AuthService {
     if (this.ending) return;
     this.ending = true;
     try {
-      const userId = this.session.user()?.id;
       await this.storage.clear();
+      // On-device data is not touched here: logout() deletes it before a deliberate sign-out, and an expired or
+      // revoked session keeps it (unreadable until the same Reporter signs in again).
       await this.identity.forget();
-      // Only a deliberate sign-out deletes this Reporter's data on the phone. An expired or revoked session keeps
-      // it (unreadable until the same Reporter signs in again).
-      if (notice === 'SIGNED_OUT' && userId) await this.localDb.wipeUser(userId).catch(() => undefined);
       this.session.setUnauthenticated(notice);
       this.bootstrapPromise = Promise.resolve();
       await beforeNavigate?.();
