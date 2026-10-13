@@ -38,6 +38,7 @@ import { locationText, statusLabel } from '../../../shared/formatters/report-sta
 import { ConfirmService } from '../../../shared/services/confirm.service';
 import { NotificationsStore } from '../../notifications/notifications.store';
 import { ReferenceStore } from '../../reference/reference.store';
+import { toActiveReport } from '../report.mapper';
 import { ReportsApiService } from '../reports.api.service';
 import { ReportsStore } from '../reports.store';
 import { HasPendingChanges } from './pending-changes.guard';
@@ -482,21 +483,6 @@ export class NewReportPage implements ViewWillEnter, OnDestroy, HasPendingChange
     const toast = await this.toasts.create({ message, duration: 3000, position: 'bottom', color });
     await toast.present();
   }
-}
-
-/** Validates `error.details.activeReport` from a 409 before trusting it. */
-export function toActiveReport(value: unknown): ActiveReportDto | null {
-  if (!value || typeof value !== 'object') return null;
-  const candidate = value as Partial<ActiveReportDto>;
-  return typeof candidate.id === 'string' && typeof candidate.reportNo === 'string' && typeof candidate.status === 'string'
-    ? {
-        id: candidate.id,
-        reportNo: candidate.reportNo,
-        status: candidate.status,
-        agentStatus: candidate.agentStatus ?? null,
-        createdAt: candidate.createdAt,
-      }
-    : null;
 }
 
 function round6(value: number): number {
