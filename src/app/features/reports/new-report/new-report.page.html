@@ -10,7 +10,18 @@
 
 <ion-content>
   @if (!unlocked()) {
-    @switch (eligibility()) {
+    @switch (gate()) {
+      @case ('unsent') {
+        <app-empty-state
+          [fill]="true"
+          icon="cloud-offline-outline"
+          color="warning"
+          title="Your saved report is waiting to send"
+          message="A report saved on this phone hasn't reached SEEFIX yet. You can start a new report once it has been sent and resolved, closed or cancelled."
+        >
+          <ion-button fill="clear" (click)="goBack()">Back to Home</ion-button>
+        </app-empty-state>
+      }
       @case ('blocked') {
         <app-empty-state
           [fill]="true"

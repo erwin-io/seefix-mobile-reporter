@@ -6,6 +6,7 @@ import { AppError, mapHttpError } from '../../core/http/api-error.mapper';
 import { AppResumeService } from '../../core/lifecycle/app-resume.service';
 import { ActiveReportDto, ReportSummary } from '../../core/models/report.model';
 import { LatestRequest } from '../../shared/utils/latest-request';
+import { ReportOutboxStore } from './outbox/report-outbox.store';
 import { REPORT_LIST_MAX, ReportsApiService } from './reports.api.service';
 
 export const DEFAULT_REPORT_LIMIT = 30;
@@ -22,6 +23,7 @@ export type SubmitEligibility = 'unknown' | 'loading' | 'allowed' | 'blocked' | 
 export class ReportsStore {
   private readonly api = inject(ReportsApiService);
   private readonly session = inject(SessionStore);
+  private readonly outbox = inject(ReportOutboxStore);
   private readonly _items = signal<ReportSummary[]>([]);
   private readonly _loading = signal(false);
   private readonly _error = signal<AppError | null>(null);
@@ -46,6 +48,13 @@ export class ReportsStore {
   readonly eligibility = this._eligibility.asReadonly();
   readonly activeReport = this._activeReport.asReadonly();
   readonly canSubmit = computed(() => this._eligibility() === 'allowed');
+  /**
+   * A new report may be started: the server allows it, or can't be asked right now (it is then saved on the phone
+   * and the server decides when it is sent; plan D7), and no earlier report is still waiting on this phone.
+   */
+  readonly canStartReport = computed(
+    () => !this.outbox.hasUnsent() && (this._eligibility() === 'allowed' || this._eligibility() === 'error'),
+  );
 
   constructor() {
     this.session.registerReset(() => this.reset());

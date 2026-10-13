@@ -205,7 +205,11 @@ export class ReportSyncService {
   }
 }
 
-/** No response, a timeout, 5xx or 429: worth trying again later. */
+/**
+ * No response, a timeout, 5xx or 429: worth trying again later.
+ * shortcut: 429 uses the normal backoff (AppError does not carry Retry-After); read the header if report creation
+ * ever gets rate-limited.
+ */
 function isTemporary(error: AppError): boolean {
   return ['OFFLINE', 'TIMEOUT', 'SERVER', 'RATE_LIMITED', 'UNKNOWN'].includes(error.kind);
 }
