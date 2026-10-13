@@ -247,6 +247,11 @@ export class ReportDetailPage implements ViewWillEnter, ViewWillLeave, OnDestroy
       next: (detail) => {
         this.detail.set(detail);
         this.error.set(null);
+        // The server moved this report on (AI result, review, resolution): bring Home and My Reports along.
+        const listed = this.reports.items().find((item) => item.id === detail.id);
+        if (listed && (listed.status !== detail.status || listed.agentStatus !== detail.agentStatus)) {
+          this.afterReportStateChanged();
+        }
       },
       error: (error: unknown) => {
         this.error.set(mapHttpError(error));
