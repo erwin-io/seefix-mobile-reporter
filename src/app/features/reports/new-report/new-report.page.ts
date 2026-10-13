@@ -32,6 +32,7 @@ import { AppError, ERROR_COPY, mapHttpError } from '../../../core/http/api-error
 import { AppResumeService } from '../../../core/lifecycle/app-resume.service';
 import { BuildingDto, FacilityLocationDto } from '../../../core/models/reference.model';
 import { ActiveReportDto } from '../../../core/models/report.model';
+import { ConnectivityBannerComponent } from '../../../shared/components/connectivity-banner/connectivity-banner.component';
 import { EmptyStateComponent } from '../../../shared/components/empty-state/empty-state.component';
 import { locationText, statusLabel } from '../../../shared/formatters/report-status-label';
 import { ConfirmService } from '../../../shared/services/confirm.service';
@@ -74,6 +75,7 @@ interface GpsFix {
     IonIcon,
     IonSpinner,
     EmptyStateComponent,
+    ConnectivityBannerComponent,
   ],
 })
 export class NewReportPage implements ViewWillEnter, OnDestroy, HasPendingChanges {

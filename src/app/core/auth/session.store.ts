@@ -11,20 +11,24 @@ export class SessionStore {
   private readonly _user = signal<AuthUser | null>(null);
   private readonly _token = signal<string | null>(null);
   private readonly _notice = signal<SessionNotice | null>(null);
+  private readonly _verified = signal(false);
   private readonly resetHandlers = new Set<() => void>();
 
   readonly state = this._state.asReadonly();
   readonly user = this._user.asReadonly();
   readonly accessToken = this._token.asReadonly();
   readonly notice = this._notice.asReadonly();
+  /** False while the app runs offline on the saved verified identity; true once the server confirmed the token. */
+  readonly verified = this._verified.asReadonly();
   readonly isAuthenticated = computed(() => this._state() === 'AUTHENTICATED');
   readonly firstName = computed(() => this._user()?.fullName?.trim().split(/\s+/)[0] ?? '');
 
-  setAuthenticated(user: AuthUser, token: string): void {
+  setAuthenticated(user: AuthUser, token: string, verified = true): void {
     // A different account must never see the previous account's cached data.
     if (this._user() && this._user()?.id !== user.id) this.runResets();
     this._token.set(token);
     this._user.set(user);
+    this._verified.set(verified);
     this._state.set('AUTHENTICATED');
     this._notice.set(null);
   }
@@ -42,6 +46,7 @@ export class SessionStore {
   setUnauthenticated(notice: SessionNotice | null = null): void {
     this._token.set(null);
     this._user.set(null);
+    this._verified.set(false);
     this._state.set('UNAUTHENTICATED');
     this._notice.set(notice);
     this.runResets();

@@ -18,6 +18,7 @@ import {
 } from '@ionic/angular';
 import { mapHttpError } from '../../../core/http/api-error.mapper';
 import { NotificationDto } from '../../../core/models/notification.model';
+import { ConnectivityBannerComponent } from '../../../shared/components/connectivity-banner/connectivity-banner.component';
 import { EmptyStateComponent } from '../../../shared/components/empty-state/empty-state.component';
 import { LoadingStateComponent } from '../../../shared/components/loading-state/loading-state.component';
 import { NotificationItemComponent } from '../../../shared/components/notification-item/notification-item.component';
@@ -30,6 +31,7 @@ import { NotificationsStore } from '../notifications.store';
   templateUrl: 'notifications.page.html',
   styleUrls: ['notifications.page.scss'],
   imports: [
+    ConnectivityBannerComponent,
     IonHeader,
     IonToolbar,
     IonButtons,

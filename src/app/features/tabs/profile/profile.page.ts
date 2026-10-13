@@ -23,6 +23,7 @@ import {
 import { AuthService } from '../../../core/auth/auth.service';
 import { SessionStore } from '../../../core/auth/session.store';
 import { APP_ENVIRONMENT } from '../../../core/config/app-environment';
+import { ConnectivityBannerComponent } from '../../../shared/components/connectivity-banner/connectivity-banner.component';
 import { NotificationBellComponent } from '../../../shared/components/notification-bell/notification-bell.component';
 import { humanize } from '../../../shared/formatters/report-status-label';
 import { ConfirmService } from '../../../shared/services/confirm.service';
@@ -34,6 +35,7 @@ import { NotificationsStore } from '../../notifications/notifications.store';
   templateUrl: 'profile.page.html',
   styleUrls: ['profile.page.scss'],
   imports: [
+    ConnectivityBannerComponent,
     IonHeader,
     IonToolbar,
     IonTitle,
