@@ -4,6 +4,7 @@ import { TestBed } from '@angular/core/testing';
 import { vi } from 'vitest';
 import { AuthService, LocalDataNotDeletedError } from '../../../core/auth/auth.service';
 import { SessionStore } from '../../../core/auth/session.store';
+import { LocalDbService } from '../../../core/storage/local-db.service';
 import { AppResumeService } from '../../../core/lifecycle/app-resume.service';
 import { ConfirmService } from '../../../shared/services/confirm.service';
 import { waitingItem } from '../../../testing/fixtures/outbox.fixture';
@@ -86,6 +87,36 @@ describe('ProfilePage log out', () => {
       confirm.confirm.mockResolvedValueOnce(true);
       await page().confirmLogout();
       expect(order).toEqual(['pause', 'logout', 'release']);
+    });
+  });
+
+  describe('Review 4: the warning waits for the saved reports to load', () => {
+    async function prepare(keys: (real: LocalDbService['keys']) => LocalDbService['keys']): Promise<void> {
+      const local = TestBed.inject(LocalDbService);
+      // A report saved on this phone earlier (e.g. before an offline relaunch).
+      await local.putAll(REPORTER_USER.id, [{ key: `outbox/item/${waitingItem().id}`, value: waitingItem() }]);
+      local.keys = keys(local.keys.bind(local));
+      TestBed.inject(SessionStore).setAuthenticated(REPORTER_USER, 't');
+    }
+
+    it('right after start-up, with a slow load: still the unsent-report warning, before anything is deleted', async () => {
+      await prepare((real) => (userId, prefix) => new Promise((resolve) => setTimeout(() => resolve(real(userId, prefix)), 50)));
+      confirm.confirm.mockResolvedValueOnce(false);
+
+      await page().confirmLogout(); // Log Out tapped immediately
+
+      expect(confirm.confirm.mock.calls[0][0]).toMatchObject({ header: 'Delete unsent reports?' });
+      expect(auth.logout).not.toHaveBeenCalled();
+    });
+
+    it('saved reports that cannot be read get their own destructive warning', async () => {
+      await prepare(() => () => Promise.reject(new Error('IndexedDB unreadable')));
+      confirm.confirm.mockResolvedValueOnce(false);
+
+      await page().confirmLogout();
+
+      expect(confirm.confirm.mock.calls[0][0]).toMatchObject({ header: 'Delete unsent reports?', destructive: true });
+      expect(confirm.confirm.mock.calls[0][0].message).toContain("couldn't be read");
     });
   });
 });

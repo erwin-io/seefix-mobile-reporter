@@ -8,6 +8,7 @@ import { AppResumeService } from '../../../core/lifecycle/app-resume.service';
 import { LocalDbService, StorageFullError } from '../../../core/storage/local-db.service';
 import { waitingItem } from '../../../testing/fixtures/outbox.fixture';
 import { REPORTER_USER, apiUrl } from '../../../testing/test-helpers';
+import { draftEntriesFor } from '../new-report/report-draft.store';
 import { ReportsStore } from '../reports.store';
 import { ReportOutboxStore, sha256Hex } from './report-outbox.store';
 import { RETRY_BACKOFF_MS, ReportSyncService } from './report-sync.service';
@@ -487,5 +488,61 @@ describe('Account switch: a run right after it never uses the previous account\u
     http.expectNone(REPORTS_URL);
     expect(await TestBed.inject(LocalDbService).keys(OTHER_REPORTER.id)).toEqual([]);
     expect(await TestBed.inject(LocalDbService).keys(REPORTER_USER.id, 'outbox/item/')).toEqual([`outbox/item/${item.id}`]);
+  });
+});
+
+describe('Review 4: a send interrupted by a pause stays cancelled after release', () => {
+  afterEach(() => {
+    const http = TestBed.inject(HttpTestingController);
+    answerOtherRequests(http);
+    http.verify();
+  });
+
+  /** Starts sending and stops at the first photo upload, which stays unanswered. */
+  async function sendUntilUpload() {
+    const { store, http } = launch();
+    const item = await saveTwoPhotoReport(store);
+    const sync = TestBed.inject(ReportSyncService);
+    const run = sync.syncNow(true);
+    (await nextRequest(http, SIGN_URL)).flush({ uploadUrl: UPLOAD_URL, fields: {} });
+    const upload = await nextRequest(http, UPLOAD_URL);
+    return { store, http, item, sync, run, upload };
+  }
+
+  it('Discard: the old upload answering after release recreates nothing and sends nothing', async () => {
+    const { store, http, item, sync, run, upload } = await sendUntilUpload();
+
+    const release = await sync.pause(); // what Discard does
+    await store.remove(REPORTER_USER.id, item);
+    release();
+    await settle(); // the fresh run after release finds nothing to send
+
+    upload.flush({ public_id: 'seefix/reports/p0' }); // the old Cloudinary answer arrives late
+    await run;
+    await settle();
+
+    http.expectNone(UPLOAD_URL);
+    http.expectNone(REPORTS_URL);
+    expect(store.items()).toEqual([]);
+    expect(await TestBed.inject(LocalDbService).keys(REPORTER_USER.id)).toEqual([]);
+  });
+
+  it('Edit: the old upload answering after release leaves the draft intact and the outbox empty', async () => {
+    const { store, http, item, sync, run, upload } = await sendUntilUpload();
+
+    const release = await sync.pause(); // what Edit does
+    await store.returnToDraft(REPORTER_USER.id, item, async (photos) => draftEntriesFor(item, photos));
+    release();
+    await settle();
+
+    upload.flush({ public_id: 'seefix/reports/p0' });
+    await run;
+    await settle();
+
+    http.expectNone(UPLOAD_URL);
+    http.expectNone(REPORTS_URL);
+    const keys = await TestBed.inject(LocalDbService).keys(REPORTER_USER.id);
+    expect(keys.filter((key) => key.startsWith('outbox/'))).toEqual([]);
+    expect(keys).toContain('draft/record');
   });
 });

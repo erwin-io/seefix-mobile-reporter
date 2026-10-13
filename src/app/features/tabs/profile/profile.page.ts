@@ -98,8 +98,10 @@ export class ProfilePage implements ViewWillEnter {
   }
 
   async confirmLogout(): Promise<void> {
-    // Reports saved on this phone and not sent yet are deleted by logging out: say so, and how many.
-    const unsent = this.outbox.items().length;
+    // Reports saved on this phone and not sent yet are deleted by logging out: say so, and how many. Read them
+    // from the phone first: right after an offline start or an account switch the list may still be loading.
+    const userId = this.user()?.id;
+    const unsent = userId ? (await this.outbox.itemsFor(userId)).length : 0;
     const confirmed = await this.confirmService.confirm(
       unsent > 0 || this.outbox.unavailable()
         ? {

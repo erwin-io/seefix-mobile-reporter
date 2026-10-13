@@ -39,6 +39,8 @@ interface Pin {
   userId: string;
   token: string;
   generation: number;
+  /** The sync epoch when the send started; any pause ends that epoch for good. */
+  epoch: number;
 }
 
 /** A Cloudinary upload failed (as opposed to the seefix-api request). */
@@ -73,6 +75,7 @@ export class ReportSyncService {
   private timer: ReturnType<typeof setTimeout> | null = null;
   /** Holders of pause() (e.g. sign-out deleting the saved reports); nothing is sent or written while any hold. */
   private pauses = 0;
+  private epoch = 0;
 
   private readonly _progress = signal<SendProgress | null>(null);
   readonly progress = this._progress.asReadonly();
@@ -108,6 +111,9 @@ export class ReportSyncService {
    */
   async pause(): Promise<() => void> {
     this.pauses += 1;
+    // Every send started before this pause is cancelled for good, also after release: a late answer to it may
+    // otherwise write a report the Reporter just discarded or turned back into a draft.
+    this.epoch += 1;
     this.clearTimer();
     await this.store.ready();
     let released = false;
@@ -268,12 +274,13 @@ export class ReportSyncService {
     const userId = this.session.user()?.id;
     const token = this.session.accessToken();
     if (!this.session.isAuthenticated() || !userId || !token) return null;
-    return { userId, token, generation: this.session.generation };
+    return { userId, token, generation: this.session.generation, epoch: this.epoch };
   }
 
   private isCurrent(pin: Pin): boolean {
     return (
       this.pauses === 0 &&
+      this.epoch === pin.epoch &&
       this.session.generation === pin.generation &&
       this.session.user()?.id === pin.userId &&
       this.session.accessToken() === pin.token
