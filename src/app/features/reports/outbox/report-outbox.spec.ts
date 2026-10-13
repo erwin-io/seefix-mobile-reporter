@@ -3,10 +3,12 @@ import { HttpTestingController, TestRequest, provideHttpClientTesting } from '@a
 import { TestBed } from '@angular/core/testing';
 import { Subject } from 'rxjs';
 import { SessionStore } from '../../../core/auth/session.store';
+import { ConnectivityService } from '../../../core/connectivity/connectivity.service';
 import { AppResumeService } from '../../../core/lifecycle/app-resume.service';
 import { LocalDbService, StorageFullError } from '../../../core/storage/local-db.service';
 import { waitingItem } from '../../../testing/fixtures/outbox.fixture';
 import { REPORTER_USER, apiUrl } from '../../../testing/test-helpers';
+import { ReportsStore } from '../reports.store';
 import { ReportOutboxStore, sha256Hex } from './report-outbox.store';
 import { RETRY_BACKOFF_MS, ReportSyncService } from './report-sync.service';
 
@@ -61,7 +63,7 @@ async function saveTwoPhotoReport(store: ReportOutboxStore) {
     ),
   });
   await store.ready();
-  await store.add(item, photos.map((b) => ({ bytes: b, mimeType: 'image/jpeg' })));
+  await store.add(REPORTER_USER.id, item, photos.map((b) => ({ bytes: b, mimeType: 'image/jpeg' })));
   return item;
 }
 
@@ -75,7 +77,7 @@ describe('Report outbox (offline plan v3, P2)', () => {
     const reopened = launch().store; // force-close and reopen
     await reopened.ready();
     expect(reopened.items()).toEqual([item]);
-    const photo = await reopened.photo(item.id, 1);
+    const photo = await reopened.photo(REPORTER_USER.id, item.id, 1);
     expect(await sha256Hex(await photo.arrayBuffer())).toBe(item.photos[1].digest);
     expect(new TextDecoder().decode(await photo.arrayBuffer())).toBe('photo-two');
   });
@@ -83,7 +85,7 @@ describe('Report outbox (offline plan v3, P2)', () => {
   it('a report that was being sent when the app closed is waiting again after reopening', async () => {
     const { store } = launch();
     const item = await saveTwoPhotoReport(store);
-    await store.update({ ...item, state: 'sending' });
+    await store.update(REPORTER_USER.id, { ...item, state: 'sending' });
 
     const reopened = launch().store;
     await reopened.ready();
@@ -98,7 +100,7 @@ describe('Report outbox (offline plan v3, P2)', () => {
       configurable: true,
     });
     try {
-      await expect(store.add(waitingItem(), [{ bytes: bytes('x'), mimeType: 'image/jpeg' }])).rejects.toBeInstanceOf(StorageFullError);
+      await expect(store.add(REPORTER_USER.id, waitingItem(), [{ bytes: bytes('x'), mimeType: 'image/jpeg' }])).rejects.toBeInstanceOf(StorageFullError);
     } finally {
       delete (navigator as { storage?: unknown }).storage;
     }
@@ -253,5 +255,158 @@ describe('Report outbox (offline plan v3, P2)', () => {
       expect(item.photos.every((photo) => photo.publicId === null)).toBe(true);
       TestBed.inject(HttpTestingController).match(() => true).forEach((req) => req.flush({}));
     });
+  });
+});
+
+describe('Review 3 corrections (P2)', () => {
+  afterEach(() => {
+    const http = TestBed.inject(HttpTestingController);
+    answerOtherRequests(http);
+    http.verify();
+  });
+
+  /** Reporter B signs in on the same phone. */
+  const switchToB = () => TestBed.inject(SessionStore).setAuthenticated(OTHER_REPORTER, 'b-token');
+  const db = () => TestBed.inject(LocalDbService);
+
+  async function expectARecoverableAndBUntouched(itemId: string): Promise<void> {
+    expect(await db().keys(REPORTER_USER.id, 'outbox/item/')).toEqual([`outbox/item/${itemId}`]);
+    expect(await db().keys(OTHER_REPORTER.id)).toEqual([]);
+  }
+
+  describe('P0: switching account while a report is being sent', () => {
+    it('during an upload: stops; nothing is written for B, no request is made for A under B', async () => {
+      const { store, http } = launch();
+      const item = await saveTwoPhotoReport(store);
+      const run = TestBed.inject(ReportSyncService).syncNow(true);
+      const sign = await nextRequest(http, SIGN_URL);
+      expect(sign.request.headers.get('Authorization')).toBe('Bearer token');
+      sign.flush({ uploadUrl: UPLOAD_URL, fields: {} });
+      const upload = await nextRequest(http, UPLOAD_URL);
+
+      switchToB();
+      upload.flush({ public_id: 'seefix/reports/p0' });
+      await run;
+      await settle();
+
+      http.expectNone(UPLOAD_URL);
+      http.expectNone(REPORTS_URL);
+      await expectARecoverableAndBUntouched(item.id);
+    });
+
+    it('before the report POST: the POST is never made', async () => {
+      const { store, http } = launch();
+      const item = await saveTwoPhotoReport(store);
+      const run = TestBed.inject(ReportSyncService).syncNow(true);
+      (await nextRequest(http, SIGN_URL)).flush({ uploadUrl: UPLOAD_URL, fields: {} });
+      (await nextRequest(http, UPLOAD_URL)).flush({ public_id: 'seefix/reports/p0' });
+      const last = await nextRequest(http, UPLOAD_URL);
+
+      last.flush({ public_id: 'seefix/reports/p1' });
+      switchToB(); // the upload answered; the POST would come next
+      await run;
+      await settle();
+
+      http.expectNone(REPORTS_URL);
+      await expectARecoverableAndBUntouched(item.id);
+    });
+
+    it('during the POST: it carries A\u2019s token; the late answer writes nothing for B', async () => {
+      const { store, http } = launch();
+      const item = await saveTwoPhotoReport(store);
+      const run = TestBed.inject(ReportSyncService).syncNow(true);
+      (await nextRequest(http, SIGN_URL)).flush({ uploadUrl: UPLOAD_URL, fields: {} });
+      (await nextRequest(http, UPLOAD_URL)).flush({ public_id: 'seefix/reports/p0' });
+      (await nextRequest(http, UPLOAD_URL)).flush({ public_id: 'seefix/reports/p1' });
+      const post = await nextRequest(http, REPORTS_URL);
+      expect(post.request.headers.get('Authorization')).toBe('Bearer token');
+
+      switchToB();
+      post.flush(CREATED, { status: 201, statusText: 'Created' });
+      await run;
+      await settle();
+
+      // A's report stays on the phone; when A signs in again the same clientReportId is an idempotent 200 replay.
+      await expectARecoverableAndBUntouched(item.id);
+      expect(store.items()).toEqual([]); // B's view
+      http.expectNone(apiUrl('/api/reports/my'));
+    });
+  });
+
+  it('P1: the queue finishes loading before a new report is added, so neither is lost', async () => {
+    const { store } = launch();
+    const existing = await saveTwoPhotoReport(store);
+
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({ providers: [provideHttpClient(), provideHttpClientTesting()] });
+    const local = TestBed.inject(LocalDbService);
+    const realKeys = local.keys.bind(local);
+    // A slow read at start-up: it answers only after the new report was saved.
+    local.keys = (userId: string, prefix?: string) =>
+      realKeys(userId, prefix).then((keys) => new Promise<string[]>((resolve) => setTimeout(() => resolve(keys), 30)));
+    TestBed.inject(SessionStore).setAuthenticated(REPORTER_USER, 'token');
+    const reopened = TestBed.inject(ReportOutboxStore);
+    const added = waitingItem({ id: '0f0e0d0c-0b0a-4908-8706-050403020100' });
+    await reopened.add(REPORTER_USER.id, added, [{ bytes: bytes('x'), mimeType: 'image/jpeg' }]);
+    await reopened.ready();
+
+    expect(reopened.items().map((item) => item.id).sort()).toEqual([existing.id, added.id].sort());
+  });
+
+  it('P1: saved reports that cannot be read block starting a new report instead of looking empty', async () => {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({ providers: [provideHttpClient(), provideHttpClientTesting()] });
+    const local = TestBed.inject(LocalDbService);
+    local.keys = () => Promise.reject(new Error('IndexedDB unreadable'));
+    TestBed.inject(SessionStore).setAuthenticated(REPORTER_USER, 'token');
+    const store = TestBed.inject(ReportOutboxStore);
+    await store.ready();
+
+    expect(store.unavailable()).toBe(true);
+    const reports = TestBed.inject(ReportsStore);
+    const check = reports.refreshEligibility();
+    TestBed.inject(HttpTestingController).expectOne(apiUrl('/api/reports/my/active')).flush({ canSubmit: true, activeReport: null });
+    await check;
+    expect(reports.canStartReport()).toBe(false);
+  });
+
+  it('P1: SEEFIX becoming reachable again (server-down cleared) sends at once, not at the next backoff', async () => {
+    const { store, http } = launch();
+    const item = await saveTwoPhotoReport(store);
+    await store.update(REPORTER_USER.id, { ...item, reason: 'server', attempts: 3, nextAttemptAt: Date.now() + 3_600_000 });
+    TestBed.inject(ReportSyncService);
+    const connectivity = TestBed.inject(ConnectivityService);
+    connectivity.apiFailed(503, 100);
+    (await nextRequest(http, apiUrl('/health'))).flush({ components: { database: { reachable: false } } }, { status: 503, statusText: 'x' });
+    await settle();
+    TestBed.tick();
+    expect(connectivity.state()).toBe('server-down');
+
+    connectivity.apiSucceeded(200); // e.g. any API call works again
+    TestBed.tick();
+    const sign = await nextRequest(http, SIGN_URL);
+    sign.flush({ uploadUrl: UPLOAD_URL, fields: {} });
+    (await nextRequest(http, UPLOAD_URL)).flush({ public_id: 'seefix/reports/p0' });
+    (await nextRequest(http, UPLOAD_URL)).flush({ public_id: 'seefix/reports/p1' });
+    (await nextRequest(http, REPORTS_URL)).flush(CREATED);
+    await settle();
+    expect(store.items()).toEqual([]);
+  });
+
+  it('429: waits at least as long as the server\u2019s Retry-After', async () => {
+    const { store, http } = launch();
+    await saveTwoPhotoReport(store);
+    const run = TestBed.inject(ReportSyncService).syncNow(true);
+    (await nextRequest(http, SIGN_URL)).flush({ uploadUrl: UPLOAD_URL, fields: {} });
+    (await nextRequest(http, UPLOAD_URL)).flush({ public_id: 'seefix/reports/p0' });
+    (await nextRequest(http, UPLOAD_URL)).flush({ public_id: 'seefix/reports/p1' });
+    (await nextRequest(http, REPORTS_URL)).flush({ error: { code: 'RATE_LIMITED' } }, {
+      status: 429,
+      statusText: 'Too Many Requests',
+      headers: { 'Retry-After': '600' },
+    });
+    await run;
+    expect(store.items()[0]).toMatchObject({ state: 'waiting', reason: 'busy' });
+    expect(store.items()[0].nextAttemptAt).toBeGreaterThanOrEqual(Date.now() + 590_000);
   });
 });

@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable, catchError, concatMap, from, map, switchMap, throwError, timeout, toArray } from 'rxjs';
 import { APP_ENVIRONMENT } from '../config/app-environment';
-import { ApiClient } from './api-client.service';
+import { ApiClient, ApiRequestOptions } from './api-client.service';
 import { mapHttpError } from './api-error.mapper';
 
 export type UploadPurpose = 'report-image';
@@ -41,8 +41,8 @@ export class DirectUploadService {
   }
 
   /** One signature (valid 1 hour) for any number of uploads. */
-  sign(purpose: UploadPurpose): Observable<SignedUpload> {
-    return this.api.post<SignedUpload>('/api/uploads/sign', { purpose });
+  sign(purpose: UploadPurpose, options?: ApiRequestOptions): Observable<SignedUpload> {
+    return this.api.post<SignedUpload>('/api/uploads/sign', { purpose }, options);
   }
 
   /** Uploads one file with an existing signature; emits its public ID. */

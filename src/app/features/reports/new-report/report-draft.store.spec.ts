@@ -1,5 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { SessionStore } from '../../../core/auth/session.store';
+import { LocalDbService } from '../../../core/storage/local-db.service';
 import { REPORTER_USER } from '../../../testing/test-helpers';
 import { ReportDraftStore } from './report-draft.store';
 
@@ -32,5 +33,33 @@ describe('ReportDraftStore (autosave of the New Report form)', () => {
     const again = launch();
     await again.clear();
     expect(await again.load()).toBeNull();
+  });
+
+  it('autosaves still queued when Submit seals the draft can never recreate it', async () => {
+    const draft = launch();
+    draft.open();
+    void draft.saveForm({ description: 'typed before Submit' }, null);
+    void draft.addPhoto({ id: 'p1', blob: new Blob(['bytes'], { type: 'image/jpeg' }), fileName: 'a.jpg', mimeType: 'image/jpeg' });
+    const keys = await draft.seal(); // what Submit deletes together with saving the report
+    await TestBed.inject(LocalDbService).delete(REPORTER_USER.id, keys);
+    void draft.saveForm({ description: 'a late debounce' }, null);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(await draft.load()).toBeNull();
+    expect(await TestBed.inject(LocalDbService).keys(REPORTER_USER.id, 'draft/')).toEqual([]);
+  });
+
+  it('the saved record never lists a photo whose bytes failed to save', async () => {
+    const draft = launch();
+    draft.open();
+    const local = TestBed.inject(LocalDbService);
+    const real = local.putAll.bind(local);
+    local.putAll = () => Promise.reject(new Error('write failed'));
+    await draft.addPhoto({ id: 'lost', blob: new Blob(['x'], { type: 'image/jpeg' }), fileName: 'a.jpg', mimeType: 'image/jpeg' });
+    local.putAll = real;
+    await draft.saveForm({ description: 'next' }, null);
+
+    const restored = await launch().load();
+    expect(restored?.record.photos).toEqual([]);
   });
 });

@@ -63,77 +63,91 @@ const itemKey = (id: string) => `${ITEM_PREFIX}${id}`;
 const photoKey = (id: string, index: number) => `outbox/photo/${id}/${index}`;
 
 /**
- * Reports saved on this phone and not yet received by SEEFIX, for the signed-in Reporter only. A report and its
- * photos are written in one transaction, so it is either fully saved or not at all.
+ * Reports saved on this phone and not yet received by SEEFIX. Every operation names the Reporter it acts for, so
+ * work started for one account can never land in another's storage; only the signed-in Reporter's items are
+ * shown. Loading and changes run one at a time, and a report and its photos are written in one transaction.
  */
 @Injectable({ providedIn: 'root' })
 export class ReportOutboxStore {
   private readonly db = inject(LocalDbService);
   private readonly session = inject(SessionStore);
   private readonly _items = signal<OutboxItem[]>([]);
-  private loaded: Promise<void> = Promise.resolve();
-  private loadedFor: string | null = null;
+  private readonly _unavailable = signal(false);
+  /** Whose items `_items` holds. */
+  private shownFor: string | null = null;
+  private queue: Promise<unknown> = Promise.resolve();
 
   readonly items = this._items.asReadonly();
   readonly hasUnsent = computed(() => this._items().length > 0);
+  /** The saved reports could not be read: never treat that as "nothing waiting". */
+  readonly unavailable = this._unavailable.asReadonly();
 
   constructor() {
     const currentUser = () => (this.session.isAuthenticated() ? (this.session.user()?.id ?? null) : null);
-    this.loaded = this.load(currentUser());
+    this.show(currentUser());
     // Each Reporter only ever sees their own items; another account's stay on disk, untouched.
     effect(() => {
       const userId = currentUser();
-      if (userId !== this.loadedFor) this.loaded = this.load(userId);
+      if (userId !== this.shownFor) this.show(userId);
     });
   }
 
-  /** Resolves once the current Reporter's items are loaded. */
+  /** Resolves once everything queued so far (including loading) is done. */
   ready(): Promise<void> {
-    return this.loaded;
+    return this.enqueue(async () => undefined);
   }
 
   /**
    * Saves a new report with its photos' original bytes and deletes `draftKeys`, all in one transaction.
    * Throws StorageFullError / LocalDbError with nothing saved.
    */
-  async add(item: OutboxItem, photos: StoredPhoto[], draftKeys: string[] = []): Promise<void> {
-    const userId = this.requireUser();
-    await this.db.ensureSpace(photos.reduce((total, photo) => total + photo.bytes.byteLength, 0));
-    await this.db.putAll(
-      userId,
-      [{ key: itemKey(item.id), value: item }, ...photos.map((value, index) => ({ key: photoKey(item.id, index), value }))],
-      draftKeys,
-    );
-    this._items.update((items) => [...items, item]);
+  add(userId: string, item: OutboxItem, photos: StoredPhoto[], draftKeys: string[] = []): Promise<void> {
+    return this.enqueue(async () => {
+      await this.db.ensureSpace(photos.reduce((total, photo) => total + photo.bytes.byteLength, 0));
+      await this.db.putAll(
+        userId,
+        [{ key: itemKey(item.id), value: item }, ...photos.map((value, index) => ({ key: photoKey(item.id, index), value }))],
+        draftKeys,
+      );
+      if (this.shownFor === userId) this._items.update((items) => [...items, item]);
+    });
   }
 
-  async update(item: OutboxItem): Promise<void> {
-    await this.db.putAll(this.requireUser(), [{ key: itemKey(item.id), value: item }]);
-    this._items.update((items) => items.map((current) => (current.id === item.id ? item : current)));
+  update(userId: string, item: OutboxItem): Promise<void> {
+    return this.enqueue(async () => {
+      await this.db.putAll(userId, [{ key: itemKey(item.id), value: item }]);
+      if (this.shownFor === userId) {
+        this._items.update((items) => items.map((current) => (current.id === item.id ? item : current)));
+      }
+    });
   }
 
-  async photo(id: string, index: number): Promise<Blob> {
-    const stored = await this.db.get<StoredPhoto>(this.requireUser(), photoKey(id, index));
+  async photo(userId: string, id: string, index: number): Promise<Blob> {
+    const stored = await this.db.get<StoredPhoto>(userId, photoKey(id, index));
     if (!stored) throw new Error(`Photo ${index + 1} of the saved report is missing.`);
     return new Blob([stored.bytes], { type: stored.mimeType });
   }
 
   /** After SEEFIX received it (or the Reporter discarded it): the item and its photos go in one transaction. */
-  async remove(id: string): Promise<void> {
-    const item = this._items().find((current) => current.id === id);
-    const keys = [itemKey(id), ...(item?.photos ?? []).map((_, index) => photoKey(id, index))];
-    await this.db.delete(this.requireUser(), keys);
-    this._items.update((items) => items.filter((current) => current.id !== id));
+  remove(userId: string, item: OutboxItem): Promise<void> {
+    return this.enqueue(async () => {
+      await this.db.delete(userId, [itemKey(item.id), ...item.photos.map((_, index) => photoKey(item.id, index))]);
+      if (this.shownFor === userId) this._items.update((items) => items.filter((current) => current.id !== item.id));
+    });
   }
 
-  private async load(userId: string | null): Promise<void> {
-    this.loadedFor = userId;
+  private show(userId: string | null): void {
+    this.shownFor = userId;
     this._items.set([]);
-    if (!userId) return;
+    this._unavailable.set(false);
+    if (userId) void this.enqueue(() => this.load(userId));
+  }
+
+  private async load(userId: string): Promise<void> {
     try {
       const keys = await this.db.keys(userId, ITEM_PREFIX);
       const items = await Promise.all(keys.map((key) => this.db.get<OutboxItem>(userId, key)));
-      if (this.loadedFor !== userId) return; // the account changed while loading
+      if (this.shownFor !== userId) return; // the account changed while loading
       // An app closed mid-send left "sending": it is simply waiting again.
       this._items.set(
         items
@@ -141,14 +155,15 @@ export class ReportOutboxStore {
           .map((item) => (item.state === 'sending' ? { ...item, state: 'waiting' } : item)),
       );
     } catch {
-      // Unreadable storage: nothing to show or send; the next sign-in tries again.
+      if (this.shownFor === userId) this._unavailable.set(true);
     }
   }
 
-  private requireUser(): string {
-    const userId = this.session.user()?.id;
-    if (!userId) throw new Error('No signed-in Reporter.');
-    return userId;
+  /** Runs `task` after everything queued before it; a failure is reported to its caller only. */
+  private enqueue<T>(task: () => Promise<T>): Promise<T> {
+    const result = this.queue.then(task);
+    this.queue = result.catch(() => undefined);
+    return result;
   }
 }
 

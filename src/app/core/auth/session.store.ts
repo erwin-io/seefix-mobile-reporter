@@ -13,6 +13,12 @@ export class SessionStore {
   private readonly _notice = signal<SessionNotice | null>(null);
   private readonly _verified = signal(false);
   private readonly resetHandlers = new Set<() => void>();
+  private _generation = 0;
+
+  /** Changes whenever a session ends or another account signs in; work started under an older value is stale. */
+  get generation(): number {
+    return this._generation;
+  }
 
   readonly state = this._state.asReadonly();
   readonly user = this._user.asReadonly();
@@ -72,6 +78,7 @@ export class SessionStore {
   }
 
   private runResets(): void {
+    this._generation += 1;
     this.resetHandlers.forEach((reset) => reset());
   }
 }

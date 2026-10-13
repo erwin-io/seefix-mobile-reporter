@@ -25,6 +25,8 @@ export class AppError extends Error {
     readonly status: number | null = null,
     /** Server-provided structured details (e.g. `activeReport` on ACTIVE_REPORT_EXISTS). */
     readonly details: Record<string, unknown> | null = null,
+    /** 429: how long the server asked the app to wait (`Retry-After`), when it said. */
+    readonly retryAfterMs: number | null = null,
   ) {
     super(userMessage);
     this.name = 'AppError';
@@ -113,6 +115,15 @@ interface ApiErrorBody {
   error?: { code?: string; message?: string; details?: unknown };
 }
 
+/** `Retry-After` is either seconds or an HTTP date. */
+export function parseRetryAfter(value: string | null, now = Date.now()): number | null {
+  if (!value) return null;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
+  const date = Date.parse(value);
+  return Number.isNaN(date) ? null : Math.max(0, date - now);
+}
+
 export function mapHttpError(error: unknown): AppError {
   if (error instanceof AppError) return error;
   if (error instanceof TimeoutError) return new AppError('TIMEOUT', ERROR_COPY.timeout, 'TIMEOUT');
@@ -137,7 +148,10 @@ export function mapHttpError(error: unknown): AppError {
       body.error?.details && typeof body.error.details === 'object' ? (body.error.details as Record<string, unknown>) : null;
     return new AppError('CONFLICT', known ?? 'This conflicts with an existing record.', code, status, details);
   }
-  if (status === 429) return new AppError('RATE_LIMITED', known ?? ERROR_COPY.otpRateLimit, code, status);
+  if (status === 429) {
+    const retryAfterMs = parseRetryAfter(error.headers?.get('Retry-After') ?? null);
+    return new AppError('RATE_LIMITED', known ?? ERROR_COPY.otpRateLimit, code, status, null, retryAfterMs);
+  }
   if (status === 503 && (code === 'EMAIL_DELIVERY_FAILED' || code === 'EMAIL_SERVICE_UNAVAILABLE')) {
     return new AppError('EMAIL_DELIVERY', ERROR_COPY.emailDelivery, code, status);
   }

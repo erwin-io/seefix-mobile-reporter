@@ -147,6 +147,7 @@ export class NewReportPage implements ViewWillEnter, OnDestroy, HasPendingChange
   private draftChecked = false;
 
   constructor() {
+    this.draft.open();
     // Also opens after a background re-check (back online / app resumed) that succeeds after this page's own
     // check failed, which otherwise left it on "Checking…".
     effect(() => {
@@ -392,26 +393,24 @@ export class NewReportPage implements ViewWillEnter, OnDestroy, HasPendingChange
     const loading = await this.loadings.create({ message: 'Saving report…', backdropDismiss: false });
     await loading.present();
     try {
-      // While SEEFIX can be asked, an active report still blocks before anything is saved. When it can't be asked,
-      // the report is saved and the server decides when it is sent (plan D7).
-      if (!offline && (await this.reports.refreshEligibility()) === false) {
-        await loading.dismiss();
-        await this.explainBlocked();
-        return;
-      }
-
+      // No network call before this: the report is durable on the phone first. The one-active-report rule is
+      // enforced by the server when it is sent (a conflict keeps it saved, as "blocked").
       const id = await this.saveToPhone();
       this.submitted = true;
       this.draft.reset();
 
+      // Every saved report gets a send attempt now (slow or server-down included; offline waits for the
+      // connection). Only a good connection is worth waiting for, and only for a bounded time.
       let received: CreateReportResponse | null = null;
+      const sent = this.sync.sent$.subscribe((event) => {
+        if (event.id === id) received = event.report;
+      });
+      const attempt = this.sync.syncNow(true);
       if (this.connectivity.state() === 'online') {
         loading.message = 'Sending report…';
-        const sent = this.sync.sent$.subscribe((event) => {
-          if (event.id === id) received = event.report;
-        });
-        await this.sync.syncNow(true).finally(() => sent.unsubscribe());
+        await Promise.race([attempt, delay(SEND_WAIT_MS)]);
       }
+      sent.unsubscribe();
       await loading.dismiss();
 
       const report = received as CreateReportResponse | null;
@@ -424,6 +423,7 @@ export class NewReportPage implements ViewWillEnter, OnDestroy, HasPendingChange
       }
     } catch (error) {
       await loading.dismiss();
+      this.draft.open(); // the form stays: keep autosaving it
       // Nothing was saved (the save is one transaction); the form keeps everything.
       await this.toast(
         error instanceof StorageFullError
@@ -448,7 +448,12 @@ export class NewReportPage implements ViewWillEnter, OnDestroy, HasPendingChange
       }),
     );
     const id = crypto.randomUUID();
+    const userId = this.session.user()?.id;
+    if (!userId) throw new Error('No signed-in Reporter.');
+    // Stop autosaving first so a late autosave can't recreate the draft after it was deleted with this save.
+    const draftKeys = await this.draft.seal();
     await this.outbox.add(
+      userId,
       {
         id,
         capturedAt: new Date().toISOString(),
@@ -478,7 +483,7 @@ export class NewReportPage implements ViewWillEnter, OnDestroy, HasPendingChange
         nextAttemptAt: null,
       },
       photos.map(({ bytes, mimeType }) => ({ bytes, mimeType })),
-      await this.draft.keys(),
+      draftKeys,
     );
     return id;
   }
@@ -494,7 +499,8 @@ export class NewReportPage implements ViewWillEnter, OnDestroy, HasPendingChange
           'This report stays saved on this phone.'
         : item?.state === 'attention'
           ? `${item.message ?? 'SEEFIX could not accept this report.'} It stays saved on this phone.`
-          : `Waiting to send · ${waitingReason(item?.reason ?? null)}. Your ${photoCountText(item?.photos.length ?? 0)} and ` +
+          : `Waiting to send · ${item?.state === 'sending' ? 'Sending now' : waitingReason(item?.reason ?? null)}. ` +
+            `Your ${photoCountText(item?.photos.length ?? 0)} and ` +
             'report details are saved on this phone. SEEFIX sends them automatically while the app is open; if you close ' +
             'the app, it sends them the next time you open it online.';
     const alert = await this.alerts.create({ header, message, buttons: ['OK'] });
@@ -560,6 +566,13 @@ export class NewReportPage implements ViewWillEnter, OnDestroy, HasPendingChange
     const toast = await this.toasts.create({ message, duration: 3000, position: 'bottom', color });
     await toast.present();
   }
+}
+
+/** How long Submit waits for an immediate send on a good connection before saying "saved, sending". */
+export const SEND_WAIT_MS = 15_000;
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function round6(value: number): number {
