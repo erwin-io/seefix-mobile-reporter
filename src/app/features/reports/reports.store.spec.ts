@@ -1,8 +1,11 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
+import { Subject } from 'rxjs';
 import { SessionStore } from '../../core/auth/session.store';
-import { REPORTER_USER, apiUrl } from '../../testing/test-helpers';
+import { AppResumeService } from '../../core/lifecycle/app-resume.service';
+import { REPORT_4_SUMMARY } from '../../testing/fixtures/reports.fixture';
+import { REPORTER_USER, apiUrl, flushAsync } from '../../testing/test-helpers';
 import { ReportsStore } from './reports.store';
 
 const ACTIVE = { id: 'r-5', reportNo: 'RPT-2026-000005', status: 'PENDING_REVIEW', agentStatus: 'FAILED', createdAt: '2026-10-09T00:00:00Z' };
@@ -70,5 +73,51 @@ describe('ReportsStore submit eligibility (one active report per Reporter)', () 
     session.setUnauthenticated('SIGNED_OUT');
     expect(store.eligibility()).toBe('unknown');
     expect(store.activeReport()).toBeNull();
+  });
+});
+
+describe('ReportsStore keeps Home and My Reports current', () => {
+  let store: ReportsStore;
+  let httpMock: HttpTestingController;
+  const LIST_URL = (req: { url: string }) => req.url === apiUrl('/api/reports/my');
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({ providers: [provideHttpClient(), provideHttpClientTesting()] });
+    TestBed.inject(SessionStore).setAuthenticated(REPORTER_USER, 't');
+    store = TestBed.inject(ReportsStore);
+    httpMock = TestBed.inject(HttpTestingController);
+  });
+
+  afterEach(() => httpMock.verify());
+
+  async function loadList(items: unknown[] = []): Promise<void> {
+    const loading = store.refresh();
+    httpMock.expectOne(LIST_URL).flush({ items });
+    await loading;
+  }
+
+  it('after a submission or status change, a list already shown is re-fetched right away', async () => {
+    await loadList();
+    expect(store.items()).toHaveLength(0);
+
+    store.invalidate();
+    httpMock.expectOne(LIST_URL).flush({ items: [REPORT_4_SUMMARY] });
+    await flushAsync();
+    expect(store.items().map((item) => item.reportNo)).toEqual(['RPT-2026-000004']);
+  });
+
+  it('a list never shown is not fetched early (the next page entry loads it)', () => {
+    store.invalidate();
+    httpMock.expectNone(LIST_URL);
+  });
+
+  it('coming back online or to the foreground refreshes a shown list and the eligibility', async () => {
+    await loadList();
+    (TestBed.inject(AppResumeService) as unknown as { resumedSubject: Subject<void> }).resumedSubject.next();
+
+    httpMock.expectOne(apiUrl('/api/reports/my/active')).flush({ canSubmit: true, activeReport: null });
+    httpMock.expectOne(LIST_URL).flush({ items: [REPORT_4_SUMMARY] });
+    await flushAsync();
+    expect(store.items()).toHaveLength(1);
   });
 });

@@ -49,7 +49,10 @@ export class ReportsStore {
     inject(AppResumeService)
       .resumed$.pipe(takeUntilDestroyed(inject(DestroyRef)))
       .subscribe(() => {
-        if (this.session.isAuthenticated()) void this.refreshEligibility();
+        if (!this.session.isAuthenticated()) return;
+        void this.refreshEligibility();
+        // Statuses may have changed on the server while the app was in the background or offline.
+        if (this.loaded()) void this.refresh();
       });
   }
 
@@ -122,9 +125,14 @@ export class ReportsStore {
     return this.refresh();
   }
 
-  /** Marks the cache stale, e.g. after a new submission. */
+  /**
+   * After a submission or a status change. A list that is already shown is re-fetched now: Home and My Reports are
+   * tabs and may not get ionViewWillEnter when the user returns from a page outside the tabs.
+   */
   invalidate(): void {
-    this._lastFetchedAt.set(this._items().length ? 0 : null);
+    if (!this.loaded()) return; // never shown: the next page entry loads it
+    this._lastFetchedAt.set(0); // stays stale if this re-fetch fails
+    void this.refresh();
   }
 
   reset(): void {
