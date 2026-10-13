@@ -1,10 +1,11 @@
 import { DestroyRef, Injectable, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { Subscription, firstValueFrom } from 'rxjs';
+import { firstValueFrom } from 'rxjs';
 import { SessionStore } from '../../core/auth/session.store';
 import { AppError, mapHttpError } from '../../core/http/api-error.mapper';
 import { AppResumeService } from '../../core/lifecycle/app-resume.service';
 import { NotificationDto } from '../../core/models/notification.model';
+import { LatestRequest } from '../../shared/utils/latest-request';
 import { NotificationsApiService } from './notifications.api.service';
 
 @Injectable({ providedIn: 'root' })
@@ -15,7 +16,7 @@ export class NotificationsStore {
   private readonly _loading = signal(false);
   private readonly _error = signal<AppError | null>(null);
   private readonly _lastFetchedAt = signal<number | null>(null);
-  private inFlight: Subscription | null = null;
+  private readonly listRequest = new LatestRequest<NotificationDto[]>();
 
   readonly items = this._items.asReadonly();
   readonly loading = this._loading.asReadonly();
@@ -32,28 +33,23 @@ export class NotificationsStore {
       });
   }
 
+  /** A newer refresh replaces an older one; every caller resolves when the latest one finishes. */
   refresh(): Promise<void> {
     if (!this.session.isAuthenticated()) return Promise.resolve();
-    this.inFlight?.unsubscribe();
     this._loading.set(true);
     this._error.set(null);
-    return new Promise<void>((resolve) => {
-      this.inFlight = this.api.list().subscribe({
-        next: (items) => {
+    return this.listRequest
+      .run(
+        this.api.list(),
+        (items) => {
           this._items.set(items);
           this._lastFetchedAt.set(Date.now());
         },
-        error: (error: unknown) => {
-          this._error.set(mapHttpError(error));
-          this._loading.set(false);
-          resolve();
-        },
-        complete: () => {
-          this._loading.set(false);
-          resolve();
-        },
+        (error) => this._error.set(mapHttpError(error)),
+      )
+      .then(() => {
+        if (!this.listRequest.busy) this._loading.set(false);
       });
-    });
   }
 
   /** Updates local state only after the server confirms. */
@@ -73,8 +69,7 @@ export class NotificationsStore {
   }
 
   reset(): void {
-    this.inFlight?.unsubscribe();
-    this.inFlight = null;
+    this.listRequest.cancel();
     this._items.set([]);
     this._loading.set(false);
     this._error.set(null);

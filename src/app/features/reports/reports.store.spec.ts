@@ -120,4 +120,72 @@ describe('ReportsStore keeps Home and My Reports current', () => {
     await flushAsync();
     expect(store.items()).toHaveLength(1);
   });
+
+  it('overlapping refreshes (page entry, submission, app resume): every caller resolves with the latest list', async () => {
+    await loadList();
+    let settled = 0;
+    const onEntry = store.refresh().then(() => settled++); // page entry
+    store.invalidate(); // submission
+    const onResume = store.refresh().then(() => settled++); // app resume
+
+    const requests = httpMock.match(LIST_URL);
+    expect(requests).toHaveLength(3);
+    expect(requests.slice(0, 2).every((req) => req.cancelled)).toBe(true); // replaced, never answered
+    requests[2].flush({ items: [REPORT_4_SUMMARY] });
+    await Promise.all([onEntry, onResume]);
+
+    expect(settled).toBe(2);
+    expect(store.items()).toHaveLength(1);
+    expect(store.loading()).toBe(false);
+  });
+
+  it('a refresh interrupted by sign-out still resolves, and does not leave "loading" on', async () => {
+    const pending = store.refresh();
+    TestBed.inject(SessionStore).setUnauthenticated('SIGNED_OUT');
+    await pending;
+    expect(store.loading()).toBe(false);
+    expect(httpMock.match(LIST_URL)[0].cancelled).toBe(true);
+  });
+});
+
+describe('ReportsStore eligibility across account changes', () => {
+  const OTHER = { ...REPORTER_USER, id: '33333333-3333-4333-8333-333333333333' };
+  const ACTIVE_URL = apiUrl('/api/reports/my/active');
+  let store: ReportsStore;
+  let session: SessionStore;
+  let httpMock: HttpTestingController;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({ providers: [provideHttpClient(), provideHttpClientTesting()] });
+    session = TestBed.inject(SessionStore);
+    session.setAuthenticated(REPORTER_USER, 'a');
+    store = TestBed.inject(ReportsStore);
+    httpMock = TestBed.inject(HttpTestingController);
+  });
+
+  afterEach(() => httpMock.verify());
+
+  it('a check started for Reporter A that answers after switching to Reporter B is discarded', async () => {
+    const forA = store.refreshEligibility();
+    session.setAuthenticated(OTHER, 'b'); // account switch resets the store
+
+    const forB = store.refreshEligibility(); // B's own check is not merged into A's
+    const [reqA, reqB] = httpMock.match(ACTIVE_URL);
+    reqA.flush({ canSubmit: false, activeReport: { id: 'a-1', reportNo: 'RPT-A', status: 'SUBMITTED', agentStatus: null } });
+    expect(await forA).toBeNull();
+    expect(store.eligibility()).toBe('loading'); // A's answer never shows for B
+    expect(store.activeReport()).toBeNull();
+
+    reqB.flush({ canSubmit: true, activeReport: null });
+    expect(await forB).toBe(true);
+    expect(store.eligibility()).toBe('allowed');
+  });
+
+  it('a failed check from before sign-out does not mark the next account as "error"', async () => {
+    const before = store.refreshEligibility();
+    session.setUnauthenticated('SIGNED_OUT');
+    httpMock.expectOne(ACTIVE_URL).error(new ProgressEvent('error'), { status: 0 });
+    expect(await before).toBeNull();
+    expect(store.eligibility()).toBe('unknown');
+  });
 });

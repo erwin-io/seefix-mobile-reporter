@@ -1,10 +1,11 @@
 import { DestroyRef, Injectable, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { Subscription, firstValueFrom } from 'rxjs';
+import { firstValueFrom } from 'rxjs';
 import { SessionStore } from '../../core/auth/session.store';
 import { AppError, mapHttpError } from '../../core/http/api-error.mapper';
 import { AppResumeService } from '../../core/lifecycle/app-resume.service';
 import { ActiveReportDto, ReportSummary } from '../../core/models/report.model';
+import { LatestRequest } from '../../shared/utils/latest-request';
 import { REPORT_LIST_MAX, ReportsApiService } from './reports.api.service';
 
 export const DEFAULT_REPORT_LIMIT = 30;
@@ -28,8 +29,10 @@ export class ReportsStore {
   private readonly _limit = signal(DEFAULT_REPORT_LIMIT);
   private readonly _eligibility = signal<SubmitEligibility>('unknown');
   private readonly _activeReport = signal<ActiveReportDto | null>(null);
-  private inFlight: Subscription | null = null;
+  private readonly listRequest = new LatestRequest<ReportSummary[]>();
   private eligibilityRequest: Promise<boolean | null> | null = null;
+  /** Bumped on every session reset (sign-out, expiry, account switch). */
+  private generation = 0;
 
   readonly items = this._items.asReadonly();
   readonly loading = this._loading.asReadonly();
@@ -63,54 +66,56 @@ export class ReportsStore {
     return this.refresh();
   }
 
-  /** Re-fetches; keeps previous items visible until the response arrives. */
+  /**
+   * Re-fetches; keeps previous items visible until the response arrives. A newer refresh (navigation, submission,
+   * app resume) replaces an older one, and every caller resolves when the latest one finishes.
+   */
   refresh(): Promise<void> {
-    this.inFlight?.unsubscribe();
     this._loading.set(true);
     this._error.set(null);
-    return new Promise<void>((resolve) => {
-      this.inFlight = this.api.listMine(this._limit()).subscribe({
-        next: (items) => {
+    return this.listRequest
+      .run(
+        this.api.listMine(this._limit()),
+        (items) => {
           this._items.set(items);
           this._lastFetchedAt.set(Date.now());
         },
-        error: (error: unknown) => {
-          this._error.set(mapHttpError(error));
-          this._loading.set(false);
-          resolve();
-        },
-        complete: () => {
-          this._loading.set(false);
-          resolve();
-        },
+        (error) => this._error.set(mapHttpError(error)),
+      )
+      .then(() => {
+        if (!this.listRequest.busy) this._loading.set(false);
       });
-    });
   }
 
   /**
    * Asks the server whether a new report may be submitted. Resolves `canSubmit`,
    * or `null` when the check failed (state becomes `error`, i.e. blocked with Retry).
    * The last known state stays visible while a re-check is in flight.
+   * A response that arrives after a sign-out or an account switch is discarded (resolves `null`).
    */
   refreshEligibility(): Promise<boolean | null> {
     if (this.eligibilityRequest) return this.eligibilityRequest;
+    const generation = this.generation;
     const state = this._eligibility();
     if (state === 'unknown' || state === 'error') this._eligibility.set('loading');
-    this.eligibilityRequest = firstValueFrom(this.api.getActive())
+    const request: Promise<boolean | null> = firstValueFrom(this.api.getActive())
       .then((response) => {
+        if (generation !== this.generation) return null;
         this._activeReport.set(response.canSubmit ? null : response.activeReport);
         this._eligibility.set(response.canSubmit ? 'allowed' : 'blocked');
         return response.canSubmit;
       })
       .catch(() => {
+        if (generation !== this.generation) return null;
         // Fail closed: never presume the slot is free when the check did not succeed.
         this._eligibility.set('error');
         return null;
       })
       .finally(() => {
-        this.eligibilityRequest = null;
+        if (this.eligibilityRequest === request) this.eligibilityRequest = null;
       });
-    return this.eligibilityRequest;
+    this.eligibilityRequest = request;
+    return request;
   }
 
   /** After a successful submission or a 409 ACTIVE_REPORT_EXISTS. */
@@ -136,8 +141,8 @@ export class ReportsStore {
   }
 
   reset(): void {
-    this.inFlight?.unsubscribe();
-    this.inFlight = null;
+    this.generation += 1; // responses for the previous account are discarded
+    this.listRequest.cancel();
     this._items.set([]);
     this._loading.set(false);
     this._error.set(null);
