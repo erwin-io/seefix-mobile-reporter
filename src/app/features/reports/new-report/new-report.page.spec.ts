@@ -135,6 +135,20 @@ describe('NewReportPage submit saves on the phone first', () => {
     TestBed.inject(HttpTestingController).expectNone(apiUrl('/api/reports'));
   });
 
+  it('Review 4: a form that was already open cannot save a second waiting report; it keeps everything', async () => {
+    const page = filledPage(); // opened while nothing was waiting
+    const outbox = TestBed.inject(ReportOutboxStore);
+    await outbox.add(REPORTER_USER.id, waitingItem(), [{ bytes: new ArrayBuffer(1), mimeType: 'image/jpeg' }]);
+
+    await page.submit();
+
+    expect(outbox.items().map((item) => item.id)).toEqual([waitingItem().id]);
+    expect(toasts[0]).toContain('A report saved on this phone is still waiting to send');
+    expect(page.form.value.description).toBe('Water leak near the stairs');
+    expect(page.photos()).toHaveLength(1);
+    expect(alerts).toEqual([]);
+  });
+
   it('a full phone saves nothing and keeps the form as it was', async () => {
     Object.defineProperty(navigator, 'storage', {
       value: { estimate: () => Promise.resolve({ quota: 10 * 1024 * 1024, usage: 9 * 1024 * 1024 }) },
