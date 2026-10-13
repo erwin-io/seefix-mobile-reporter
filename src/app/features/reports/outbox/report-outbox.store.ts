@@ -1,7 +1,7 @@
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import { SessionStore } from '../../../core/auth/session.store';
 import { ActiveReportDto } from '../../../core/models/report.model';
-import { LocalDbService } from '../../../core/storage/local-db.service';
+import { LocalDbService, LocalEntry } from '../../../core/storage/local-db.service';
 
 /**
  * - `waiting`: saved on the phone, will be sent (see `reason` for why it hasn't been yet)
@@ -53,7 +53,7 @@ export interface OutboxItem {
 }
 
 /** A photo's original bytes as stored on the phone. */
-interface StoredPhoto {
+export interface StoredPhoto {
   bytes: ArrayBuffer;
   mimeType: string;
 }
@@ -142,6 +142,25 @@ export class ReportOutboxStore {
   remove(userId: string, item: OutboxItem): Promise<void> {
     return this.enqueue(async () => {
       await this.db.delete(userId, [itemKey(item.id), ...item.photos.map((_, index) => photoKey(item.id, index))]);
+      if (this.shownFor === userId) this._items.update((items) => items.filter((current) => current.id !== item.id));
+    });
+  }
+
+  /**
+   * Back to editing: in one transaction the saved report and its photos become the draft (entries built by
+   * `toDraft` from the original bytes) and `draftKeys` (any older draft) are deleted.
+   */
+  returnToDraft(
+    userId: string,
+    item: OutboxItem,
+    toDraft: (photos: StoredPhoto[]) => Promise<LocalEntry[]>,
+    draftKeys: string[] = [],
+  ): Promise<void> {
+    return this.enqueue(async () => {
+      const photos = await Promise.all(item.photos.map((_, index) => this.db.get<StoredPhoto>(userId, photoKey(item.id, index))));
+      if (photos.some((photo) => !photo)) throw new Error('A photo of the saved report is missing.');
+      const outboxKeys = [itemKey(item.id), ...item.photos.map((_, index) => photoKey(item.id, index))];
+      await this.db.putAll(userId, await toDraft(photos as StoredPhoto[]), [...draftKeys, ...outboxKeys]);
       if (this.shownFor === userId) this._items.update((items) => items.filter((current) => current.id !== item.id));
     });
   }

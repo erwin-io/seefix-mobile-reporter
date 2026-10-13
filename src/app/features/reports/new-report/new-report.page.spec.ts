@@ -131,7 +131,7 @@ describe('NewReportPage submit saves on the phone first', () => {
     expect(alerts[0].header).toBe('Report saved on this device');
     expect(alerts[0].message).toContain('Waiting to send · No internet connection');
     expect(toasts.join(' ')).not.toMatch(/submitted/i);
-    expect(nav.navigateRoot).toHaveBeenCalledWith('/tabs/home');
+    expect(nav.navigateForward).toHaveBeenCalledWith(['/reports/local', outbox.items()[0].id], { replaceUrl: true });
     TestBed.inject(HttpTestingController).expectNone(apiUrl('/api/reports'));
   });
 
@@ -187,7 +187,7 @@ describe('NewReportPage submit saves on the phone first', () => {
 
       await deliver((post) => post.flush({ id: 'r-30', reportNo: 'RPT-2026-000030', status: 'SUBMITTED', agentStatus: 'PENDING', createdAt: '', imageCount: 1 }, { status: 201, statusText: 'Created' }));
       await submitting;
-      expect(toasts).toContain('Report RPT-2026-000030 submitted.');
+      expect(toasts).toEqual([]); // the app announces 'received by SEEFIX' (AppComponent)
       expect(nav.navigateForward).toHaveBeenCalledWith(['/reports', 'r-30'], { replaceUrl: true });
       expect(TestBed.inject(ReportOutboxStore).items()).toEqual([]);
     });

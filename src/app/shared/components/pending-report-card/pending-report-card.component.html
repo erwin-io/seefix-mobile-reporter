@@ -1,0 +1,42 @@
+@if (outbox.unavailable()) {
+  <ion-card class="banner problem" role="alert">
+    <ion-card-content>
+      <div class="row">
+        <div class="badge" aria-hidden="true"><ion-icon name="alert-circle-outline"></ion-icon></div>
+        <div class="text">
+          <span class="eyebrow">Saved on this device</span>
+          <strong>Saved reports can't be opened</strong>
+        </div>
+      </div>
+      <p>Reports saved on this phone couldn't be read. Restart the app. New reports are paused until then.</p>
+    </ion-card-content>
+  </ion-card>
+}
+
+@for (item of outbox.items(); track item.id) {
+  @let state = status(item);
+  <ion-card class="banner" [class.problem]="state.problem" role="status">
+    <ion-card-content>
+      <div class="row">
+        <div class="badge" aria-hidden="true">
+          <ion-icon [name]="state.problem ? 'alert-circle-outline' : 'cloud-upload-outline'"></ion-icon>
+        </div>
+        <div class="text">
+          <span class="eyebrow">Saved on this device</span>
+          <strong>{{ state.title }}</strong>
+          <span class="detail">{{ state.detail }}</span>
+        </div>
+      </div>
+      <p>
+        {{ item.fields.description }}<br />
+        <span class="meta">{{ photoCount(item.photos.length) }} · Captured {{ item.capturedAt | date: 'MMM d, h:mm a' }}</span>
+      </p>
+      <div class="actions">
+        <ion-button fill="outline" (click)="open(item)">View</ion-button>
+        @if (item.state === 'waiting') {
+          <ion-button (click)="sendNow()" [disabled]="offline()">Send now</ion-button>
+        }
+      </div>
+    </ion-card-content>
+  </ion-card>
+}

@@ -27,6 +27,7 @@ import { EmptyStateComponent } from '../../../shared/components/empty-state/empt
 import { LoadingStateComponent } from '../../../shared/components/loading-state/loading-state.component';
 import { NotificationBellComponent } from '../../../shared/components/notification-bell/notification-bell.component';
 import { NotificationItemComponent } from '../../../shared/components/notification-item/notification-item.component';
+import { PendingReportCardComponent } from '../../../shared/components/pending-report-card/pending-report-card.component';
 import { ReportFabComponent } from '../../../shared/components/report-fab/report-fab.component';
 import { ReportListItemComponent } from '../../../shared/components/report-list-item/report-list-item.component';
 import { NotificationsStore } from '../../notifications/notifications.store';
@@ -59,6 +60,7 @@ const RECENT_UPDATES = 3;
     NotificationItemComponent,
     ReportListItemComponent,
     ActiveReportBannerComponent,
+    PendingReportCardComponent,
     ConnectivityBannerComponent,
     ReportFabComponent,
     EmptyStateComponent,

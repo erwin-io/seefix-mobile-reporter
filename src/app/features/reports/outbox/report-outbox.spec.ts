@@ -411,6 +411,41 @@ describe('Review 3 corrections (P2)', () => {
   });
 });
 
+describe('Pausing sends (P3 sign-out)', () => {
+  afterEach(() => {
+    const http = TestBed.inject(HttpTestingController);
+    answerOtherRequests(http);
+    http.verify();
+  });
+
+  it('while paused nothing is sent; a send already running writes nothing more; release resumes', async () => {
+    const { store, http } = launch();
+    const item = await saveTwoPhotoReport(store);
+    const sync = TestBed.inject(ReportSyncService);
+    const run = sync.syncNow(true);
+    (await nextRequest(http, SIGN_URL)).flush({ uploadUrl: UPLOAD_URL, fields: {} });
+    const upload = await nextRequest(http, UPLOAD_URL);
+
+    const release = await sync.pause(); // e.g. sign-out is about to delete the saved reports
+    upload.flush({ public_id: 'seefix/reports/p0' });
+    await run;
+    await settle();
+    http.expectNone(UPLOAD_URL);
+    expect((await TestBed.inject(LocalDbService).get<{ photos: { publicId: string | null }[] }>(REPORTER_USER.id, `outbox/item/${item.id}`))?.photos[0].publicId).toBeNull();
+
+    await sync.syncNow(true);
+    http.expectNone(SIGN_URL);
+
+    release();
+    (await nextRequest(http, SIGN_URL)).flush({ uploadUrl: UPLOAD_URL, fields: {} });
+    (await nextRequest(http, UPLOAD_URL)).flush({ public_id: 'seefix/reports/p0' });
+    (await nextRequest(http, UPLOAD_URL)).flush({ public_id: 'seefix/reports/p1' });
+    (await nextRequest(http, REPORTS_URL)).flush(CREATED);
+    await settle();
+    expect(store.items()).toEqual([]);
+  });
+});
+
 describe('Account switch: a run right after it never uses the previous account\u2019s items', () => {
   afterEach(() => {
     const http = TestBed.inject(HttpTestingController);

@@ -1,0 +1,92 @@
+<ion-header class="no-shadow">
+  <ion-toolbar color="primary">
+    <ion-buttons slot="start">
+      <ion-back-button defaultHref="/tabs/home"></ion-back-button>
+    </ion-buttons>
+    <ion-title>Saved report</ion-title>
+  </ion-toolbar>
+  <app-connectivity-banner></app-connectivity-banner>
+</ion-header>
+
+<ion-content>
+  @if (item(); as item) {
+    <div class="content-container">
+      <ion-card class="status" [class.problem]="status()!.problem">
+        <ion-card-content>
+          <span class="eyebrow">Saved on this device · Not yet submitted</span>
+          <h2>{{ status()!.title }}</h2>
+          <p class="detail" role="status">{{ status()!.detail }}</p>
+
+          @switch (item.state) {
+            @case ('waiting') {
+              <p class="hint">
+                SEEFIX sends it automatically while the app is open. If you close the app, it is sent the next time you
+                open it online.
+              </p>
+              <ion-button expand="block" (click)="sendNow()" [disabled]="offline()">Send now</ion-button>
+            }
+            @case ('blocked') {
+              <p class="hint">
+                You can have one active report at a time. When {{ item.activeReport?.reportNo ?? 'your other report' }} is
+                resolved, closed or cancelled, send this one again.
+              </p>
+              @if (item.activeReport) {
+                <ion-button expand="block" fill="outline" (click)="viewActiveReport(item)">View {{ item.activeReport.reportNo }}</ion-button>
+              }
+              <ion-button expand="block" (click)="tryAgain(item)" [disabled]="offline()">Try sending again</ion-button>
+            }
+            @case ('attention') {
+              <ion-button expand="block" (click)="edit(item)" [disabled]="busy()">Edit report</ion-button>
+            }
+          }
+        </ion-card-content>
+      </ion-card>
+
+      <section class="ion-padding details">
+        <h3>Details</h3>
+        <p class="description">{{ item.fields.description }}</p>
+        @if (item.fields.notes) {
+          <p class="notes">{{ item.fields.notes }}</p>
+        }
+        <dl>
+          <dt>Captured</dt>
+          <dd>{{ item.capturedAt | date: 'MMM d, y, h:mm a' }}</dd>
+          @if (location()) {
+            <dt>Location</dt>
+            <dd>{{ location() }}</dd>
+          }
+          @if (item.fields.gpsLat !== null && item.fields.gpsLng !== null) {
+            <dt>GPS</dt>
+            <dd>{{ item.fields.gpsLat }}, {{ item.fields.gpsLng }}</dd>
+          }
+          <dt>Photos</dt>
+          <dd>{{ photoCount(item.photos.length) }}</dd>
+        </dl>
+
+        <div class="photos">
+          @for (url of photoUrls(); track url; let i = $index) {
+            <img [src]="url" [alt]="'Photo ' + (i + 1) + ' of the saved report'" />
+          }
+        </div>
+      </section>
+
+      @if (item.state !== 'sending') {
+        <div class="ion-padding">
+          <ion-button expand="block" fill="clear" color="danger" (click)="discard(item)" [disabled]="busy()">
+            <ion-icon name="trash-outline" slot="start" aria-hidden="true"></ion-icon>
+            Discard report
+          </ion-button>
+        </div>
+      }
+    </div>
+  } @else {
+    <app-empty-state
+      [fill]="true"
+      icon="document-text-outline"
+      title="This saved report isn't on this phone"
+      message="It may have been sent already. Check My Reports."
+    >
+      <ion-button fill="outline" (click)="openMyReports()">My Reports</ion-button>
+    </app-empty-state>
+  }
+</ion-content>
