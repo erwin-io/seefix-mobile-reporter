@@ -98,6 +98,16 @@ export class ReportOutboxStore {
   }
 
   /**
+   * The items of exactly this Reporter, loaded now if the store still shows another account (the account switch
+   * reaches the store a moment after the session changes).
+   */
+  async itemsFor(userId: string): Promise<OutboxItem[]> {
+    if (this.shownFor !== userId) this.show(userId);
+    await this.ready();
+    return this.shownFor === userId ? this._items() : [];
+  }
+
+  /**
    * Saves a new report with its photos' original bytes and deletes `draftKeys`, all in one transaction.
    * Throws StorageFullError / LocalDbError with nothing saved.
    */

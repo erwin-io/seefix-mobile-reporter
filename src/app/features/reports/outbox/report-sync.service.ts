@@ -115,10 +115,9 @@ export class ReportSyncService {
 
   private async run(force: boolean): Promise<void> {
     this.clearTimer();
-    await this.store.ready();
     const pin = this.pin();
     if (!pin) return;
-    for (const item of this.store.items()) {
+    for (const item of await this.store.itemsFor(pin.userId)) {
       if (!this.isCurrent(pin)) return;
       if (item.state !== 'waiting') continue;
       if (this.connectivity.state() === 'offline') {

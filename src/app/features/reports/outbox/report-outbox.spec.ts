@@ -410,3 +410,29 @@ describe('Review 3 corrections (P2)', () => {
     expect(store.items()[0].nextAttemptAt).toBeGreaterThanOrEqual(Date.now() + 590_000);
   });
 });
+
+describe('Account switch: a run right after it never uses the previous account\u2019s items', () => {
+  afterEach(() => {
+    const http = TestBed.inject(HttpTestingController);
+    answerOtherRequests(http);
+    http.verify();
+  });
+
+  it('a send started for B before the store caught up does not send A\u2019s report', async () => {
+    const { store, http, lifecycle } = launch();
+    lifecycle._online.set(false); // A's report waits on the phone
+    const item = await saveTwoPhotoReport(store);
+    const sync = TestBed.inject(ReportSyncService);
+    await sync.syncNow(true);
+    lifecycle._online.set(true);
+
+    TestBed.inject(SessionStore).setAuthenticated(OTHER_REPORTER, 'b-token');
+    await sync.syncNow(true); // before any change detection: the store still holds A's items
+    await settle();
+
+    http.expectNone(SIGN_URL);
+    http.expectNone(REPORTS_URL);
+    expect(await TestBed.inject(LocalDbService).keys(OTHER_REPORTER.id)).toEqual([]);
+    expect(await TestBed.inject(LocalDbService).keys(REPORTER_USER.id, 'outbox/item/')).toEqual([`outbox/item/${item.id}`]);
+  });
+});
