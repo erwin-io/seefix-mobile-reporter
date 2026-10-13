@@ -333,7 +333,7 @@ describe('Review 3 corrections (P2)', () => {
     });
   });
 
-  it('P1: the queue finishes loading before a new report is added, so neither is lost', async () => {
+  it('Review 4: a Submit racing the cold-start load cannot add a second waiting report; the first stays', async () => {
     const { store } = launch();
     const existing = await saveTwoPhotoReport(store);
 
@@ -347,10 +347,28 @@ describe('Review 3 corrections (P2)', () => {
     TestBed.inject(SessionStore).setAuthenticated(REPORTER_USER, 'token');
     const reopened = TestBed.inject(ReportOutboxStore);
     const added = waitingItem({ id: '0f0e0d0c-0b0a-4908-8706-050403020100' });
-    await reopened.add(REPORTER_USER.id, added, [{ bytes: bytes('x'), mimeType: 'image/jpeg' }]);
+    await expect(reopened.add(REPORTER_USER.id, added, [{ bytes: bytes('x'), mimeType: 'image/jpeg' }])).rejects.toMatchObject({
+      name: 'ReportAlreadyWaitingError',
+      reason: 'waiting',
+    });
     await reopened.ready();
 
-    expect(reopened.items().map((item) => item.id).sort()).toEqual([existing.id, added.id].sort());
+    expect(reopened.items().map((item) => item.id)).toEqual([existing.id]);
+    expect(await realKeys(REPORTER_USER.id, 'outbox/item/')).toEqual([`outbox/item/${existing.id}`]);
+  });
+
+  it('Review 4: a save is refused while the saved reports cannot be read', async () => {
+    TestBed.resetTestingModule();
+    TestBed.configureTestingModule({ providers: [provideHttpClient(), provideHttpClientTesting()] });
+    TestBed.inject(SessionStore).setAuthenticated(REPORTER_USER, 'token');
+    const store = TestBed.inject(ReportOutboxStore);
+    await store.ready();
+    TestBed.inject(LocalDbService).keys = () => Promise.reject(new Error('IndexedDB unreadable'));
+
+    await expect(store.add(REPORTER_USER.id, waitingItem(), [{ bytes: bytes('x'), mimeType: 'image/jpeg' }])).rejects.toMatchObject({
+      reason: 'unreadable',
+    });
+    expect(store.items()).toEqual([]);
   });
 
   it('P1: saved reports that cannot be read block starting a new report instead of looking empty', async () => {

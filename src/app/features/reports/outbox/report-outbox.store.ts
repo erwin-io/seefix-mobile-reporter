@@ -58,6 +58,14 @@ export interface StoredPhoto {
   mimeType: string;
 }
 
+/** A new report can't be saved: one is already waiting on this phone, or the saved reports can't be read. */
+export class ReportAlreadyWaitingError extends Error {
+  override readonly name = 'ReportAlreadyWaitingError';
+  constructor(readonly reason: 'waiting' | 'unreadable') {
+    super(reason === 'waiting' ? 'A report is already waiting to send.' : 'Saved reports could not be read.');
+  }
+}
+
 const ITEM_PREFIX = 'outbox/item/';
 const itemKey = (id: string) => `${ITEM_PREFIX}${id}`;
 const photoKey = (id: string, index: number) => `outbox/photo/${id}/${index}`;
@@ -113,6 +121,12 @@ export class ReportOutboxStore {
    */
   add(userId: string, item: OutboxItem, photos: StoredPhoto[], draftKeys: string[] = []): Promise<void> {
     return this.enqueue(async () => {
+      // One report per Reporter at a time, checked on the phone's storage itself (not the list in memory, which
+      // may still be loading or stale): a second one is refused, and so is any save while that can't be read.
+      const waiting = await this.db.keys(userId, ITEM_PREFIX).catch(() => {
+        throw new ReportAlreadyWaitingError('unreadable');
+      });
+      if (waiting.length) throw new ReportAlreadyWaitingError('waiting');
       await this.db.ensureSpace(photos.reduce((total, photo) => total + photo.bytes.byteLength, 0));
       await this.db.putAll(
         userId,

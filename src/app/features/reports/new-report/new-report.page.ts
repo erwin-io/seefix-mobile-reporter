@@ -38,7 +38,7 @@ import { locationText, statusLabel } from '../../../shared/formatters/report-sta
 import { ConfirmService } from '../../../shared/services/confirm.service';
 import { ReferenceStore } from '../../reference/reference.store';
 import { photoCountText, waitingReason } from '../outbox/delivery-status';
-import { ReportOutboxStore, sha256Hex } from '../outbox/report-outbox.store';
+import { ReportAlreadyWaitingError, ReportOutboxStore, sha256Hex } from '../outbox/report-outbox.store';
 import { ReportSyncService } from '../outbox/report-sync.service';
 import { ReportsStore } from '../reports.store';
 import { HasPendingChanges } from './pending-changes.guard';
@@ -422,12 +422,7 @@ export class NewReportPage implements ViewWillEnter, OnDestroy, HasPendingChange
       await loading.dismiss();
       this.draft.open(); // the form stays: keep autosaving it
       // Nothing was saved (the save is one transaction); the form keeps everything.
-      await this.toast(
-        error instanceof StorageFullError
-          ? 'Not enough free space on this phone to save the report. Free up some space and try again.'
-          : "We couldn't save the report on this phone. Your details are still here; please try again.",
-        'danger',
-      );
+      await this.toast(submitFailureMessage(error), 'danger');
     } finally {
       this.submitting.set(false);
     }
@@ -571,6 +566,19 @@ export const SEND_WAIT_MS = 15_000;
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Why Submit saved nothing (the form keeps everything). */
+function submitFailureMessage(error: unknown): string {
+  if (error instanceof StorageFullError) {
+    return 'Not enough free space on this phone to save the report. Free up some space and try again.';
+  }
+  if (error instanceof ReportAlreadyWaitingError) {
+    return error.reason === 'waiting'
+      ? 'A report saved on this phone is still waiting to send. You can submit this one after it has been sent and resolved, closed or cancelled. Your details are still here.'
+      : "Reports saved on this phone couldn't be read, so this one can't be saved yet. Restart the app. Your details are still here.";
+  }
+  return "We couldn't save the report on this phone. Your details are still here; please try again.";
 }
 
 function round6(value: number): number {
