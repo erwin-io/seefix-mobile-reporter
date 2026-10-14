@@ -1,0 +1,87 @@
+.status {
+  margin: 16px;
+  border-radius: 16px;
+  border-left: 4px solid var(--ion-color-primary);
+
+  &.problem {
+    border-left-color: var(--ion-color-warning);
+  }
+
+  h2 {
+    margin: 4px 0;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--ion-color-dark);
+  }
+
+  .detail {
+    margin: 0 0 8px;
+    color: var(--ion-color-dark);
+    overflow-wrap: anywhere;
+  }
+
+  .hint {
+    font-size: 14px;
+    color: var(--ion-color-medium-shade);
+  }
+
+  ion-button {
+    margin-top: 8px;
+    text-transform: none;
+    font-weight: 600;
+  }
+}
+
+.eyebrow {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ion-color-medium-shade);
+}
+
+.details {
+  h3 {
+    margin: 0 0 8px;
+    font-size: 16px;
+    font-weight: 600;
+  }
+
+  .description,
+  .notes {
+    overflow-wrap: anywhere;
+  }
+
+  .notes {
+    color: var(--ion-color-medium-shade);
+  }
+
+  dl {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 6px 16px;
+    margin: 12px 0;
+  }
+
+  dt {
+    color: var(--ion-color-medium-shade);
+  }
+
+  dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+}
+
+.photos {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 8px;
+
+  img {
+    width: 100%;
+    aspect-ratio: 1;
+    object-fit: cover;
+    border-radius: 12px;
+  }
+}

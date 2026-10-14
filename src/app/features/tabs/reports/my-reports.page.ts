@@ -25,6 +25,7 @@ import { ConnectivityBannerComponent } from '../../../shared/components/connecti
 import { EmptyStateComponent } from '../../../shared/components/empty-state/empty-state.component';
 import { LoadingStateComponent } from '../../../shared/components/loading-state/loading-state.component';
 import { NotificationBellComponent } from '../../../shared/components/notification-bell/notification-bell.component';
+import { PendingReportCardComponent } from '../../../shared/components/pending-report-card/pending-report-card.component';
 import { ReportFabComponent } from '../../../shared/components/report-fab/report-fab.component';
 import { ReportListItemComponent } from '../../../shared/components/report-list-item/report-list-item.component';
 import { StatusGroup, statusMeta } from '../../../shared/formatters/report-status-label';
@@ -70,6 +71,7 @@ export function filterReports(items: ReportSummary[], filter: ReportFilter, quer
     NotificationBellComponent,
     ReportListItemComponent,
     ActiveReportBannerComponent,
+    PendingReportCardComponent,
     ReportFabComponent,
     EmptyStateComponent,
     LoadingStateComponent,
