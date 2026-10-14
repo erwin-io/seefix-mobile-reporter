@@ -18,17 +18,19 @@
     }
   }
   @case ('error') {
-    <ion-card class="banner error" role="alert">
-      <ion-card-content>
-        <div class="row">
-          <div class="badge" aria-hidden="true"><ion-icon name="cloud-offline-outline"></ion-icon></div>
-          <div class="text">
-            <span class="eyebrow">Can't check right now</span>
-            <strong>We couldn't confirm whether you can submit a new report.</strong>
+    @if (showError()) {
+      <ion-card class="banner error" role="alert">
+        <ion-card-content>
+          <div class="row">
+            <div class="badge" aria-hidden="true"><ion-icon name="cloud-offline-outline"></ion-icon></div>
+            <div class="text">
+              <span class="eyebrow">Can't check right now</span>
+              <strong>We couldn't confirm whether you can submit a new report.</strong>
+            </div>
           </div>
-        </div>
-        <ion-button expand="block" fill="outline" (click)="retry()">Retry</ion-button>
-      </ion-card-content>
-    </ion-card>
+          <ion-button expand="block" fill="outline" (click)="retry()">Retry</ion-button>
+        </ion-card-content>
+      </ion-card>
+    }
   }
 }
