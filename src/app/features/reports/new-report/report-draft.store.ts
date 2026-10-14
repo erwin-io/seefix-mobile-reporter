@@ -1,7 +1,10 @@
 import { Injectable, inject } from '@angular/core';
 import { SessionStore } from '../../../core/auth/session.store';
 import { LocalDbService } from '../../../core/storage/local-db.service';
+import type { OutboxItem } from '../outbox/report-outbox.store';
 
+/** Building choice meaning "my location isn't listed": free-text building/floor/area. */
+export const OTHER_LOCATION = '__other__';
 export const DRAFT_PREFIX = 'draft/';
 const RECORD_KEY = 'draft/record';
 const photoKey = (id: string) => `draft/photo/${id}`;
@@ -122,6 +125,32 @@ export class ReportDraftStore {
     this.queue = settled;
     return settled;
   }
+}
+
+/**
+ * The draft entries for a saved report going back to editing (fields, GPS and the original photo bytes).
+ * A selected facility location is not restored: the Reporter picks the location again (it may be why SEEFIX
+ * rejected the report); the text location is kept.
+ */
+export function draftEntriesFor(
+  item: Pick<OutboxItem, 'id' | 'fields' | 'photos'>,
+  photos: { bytes: ArrayBuffer }[],
+): { key: string; value: unknown }[] {
+  const ids = item.photos.map((_, index) => `${item.id}-${index}`);
+  const record: DraftRecord = {
+    form: {
+      description: item.fields.description,
+      buildingId: item.fields.building ? OTHER_LOCATION : '',
+      notes: item.fields.notes ?? '',
+      building: item.fields.building ?? '',
+      floor: item.fields.floor ?? '',
+      roomOrArea: item.fields.roomOrArea ?? '',
+    },
+    gps: item.fields.gpsLat != null && item.fields.gpsLng != null ? { lat: item.fields.gpsLat, lng: item.fields.gpsLng, accuracy: null } : null,
+    photos: item.photos.map((photo, index) => ({ id: ids[index], fileName: photo.fileName, mimeType: photo.mimeType })),
+    savedAt: new Date().toISOString(),
+  };
+  return [{ key: RECORD_KEY, value: record }, ...photos.map((photo, index) => ({ key: photoKey(ids[index]), value: photo.bytes }))];
 }
 
 function emptyRecord(): DraftRecord {

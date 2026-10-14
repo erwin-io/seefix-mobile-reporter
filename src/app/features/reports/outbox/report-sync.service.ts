@@ -39,6 +39,8 @@ interface Pin {
   userId: string;
   token: string;
   generation: number;
+  /** The sync epoch when the send started; any pause ends that epoch for good. */
+  epoch: number;
 }
 
 /** A Cloudinary upload failed (as opposed to the seefix-api request). */
@@ -71,11 +73,16 @@ export class ReportSyncService {
   private followUp: Promise<void> | null = null;
   private followUpForce = false;
   private timer: ReturnType<typeof setTimeout> | null = null;
+  /** Holders of pause() (e.g. sign-out deleting the saved reports); nothing is sent or written while any hold. */
+  private pauses = 0;
+  private epoch = 0;
 
   private readonly _progress = signal<SendProgress | null>(null);
   readonly progress = this._progress.asReadonly();
   /** A saved report SEEFIX has now received. */
   readonly sent$ = new Subject<{ id: string; report: CreateReportResponse }>();
+  /** Saved reports received in this app session, by local ID (an old link to one opens the server report). */
+  readonly delivered = new Map<string, CreateReportResponse>();
 
   constructor() {
     const destroyRef = inject(DestroyRef);
@@ -97,8 +104,30 @@ export class ReportSyncService {
     });
   }
 
+  /**
+   * Stops sending until the returned release is called, so the caller can safely delete saved reports. A send in
+   * progress checks before every write and stops writing at once; this waits only for writes already queued
+   * (never for a slow network request).
+   */
+  async pause(): Promise<() => void> {
+    this.pauses += 1;
+    // Every send started before this pause is cancelled for good, also after release: a late answer to it may
+    // otherwise write a report the Reporter just discarded or turned back into a draft.
+    this.epoch += 1;
+    this.clearTimer();
+    await this.store.ready();
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      this.pauses -= 1;
+      if (this.pauses === 0) void this.syncNow(true);
+    };
+  }
+
   /** Sends every waiting report that is due (all of them with `force`). One run at a time; a call during a run gets the next one. */
   syncNow(force = false): Promise<void> {
+    if (this.pauses > 0) return Promise.resolve();
     if (this.running) {
       this.followUpForce ||= force;
       this.followUp ??= this.running.then(() => {
@@ -119,7 +148,8 @@ export class ReportSyncService {
     if (!pin) return;
     for (const item of await this.store.itemsFor(pin.userId)) {
       if (!this.isCurrent(pin)) return;
-      if (item.state !== 'waiting') continue;
+      // Runs never overlap, so "sending" here was left by an interrupted send (pause): it is waiting again.
+      if (item.state !== 'waiting' && item.state !== 'sending') continue;
       if (this.connectivity.state() === 'offline') {
         if (item.reason !== 'offline') await this.store.update(pin.userId, { ...item, reason: 'offline' });
         continue;
@@ -180,6 +210,7 @@ export class ReportSyncService {
       });
       this.reports.invalidate();
       void this.notifications.refresh();
+      this.delivered.set(item.id, report);
       this.sent$.next({ id: item.id, report });
     } catch (error) {
       if (error instanceof SessionChangedError || !this.isCurrent(pin)) throw new SessionChangedError();
@@ -243,11 +274,13 @@ export class ReportSyncService {
     const userId = this.session.user()?.id;
     const token = this.session.accessToken();
     if (!this.session.isAuthenticated() || !userId || !token) return null;
-    return { userId, token, generation: this.session.generation };
+    return { userId, token, generation: this.session.generation, epoch: this.epoch };
   }
 
   private isCurrent(pin: Pin): boolean {
     return (
+      this.pauses === 0 &&
+      this.epoch === pin.epoch &&
       this.session.generation === pin.generation &&
       this.session.user()?.id === pin.userId &&
       this.session.accessToken() === pin.token

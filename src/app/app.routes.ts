@@ -31,6 +31,12 @@ export const routes: Routes = [
     loadComponent: () => import('./features/reports/new-report/new-report.page').then((m) => m.NewReportPage),
   },
   {
+    // A report saved on this phone, not yet received by SEEFIX (`:id` is its clientReportId).
+    path: 'reports/local/:id',
+    canActivate: reporterOnly,
+    loadComponent: () => import('./features/reports/local-report/local-report.page').then((m) => m.LocalReportPage),
+  },
+  {
     path: 'reports/:id',
     canActivate: reporterOnly,
     loadComponent: () =>

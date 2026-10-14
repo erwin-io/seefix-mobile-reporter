@@ -28,6 +28,8 @@ import { NotificationBellComponent } from '../../../shared/components/notificati
 import { humanize } from '../../../shared/formatters/report-status-label';
 import { ConfirmService } from '../../../shared/services/confirm.service';
 import { NotificationsStore } from '../../notifications/notifications.store';
+import { ReportOutboxStore } from '../../reports/outbox/report-outbox.store';
+import { ReportSyncService } from '../../reports/outbox/report-sync.service';
 
 /** Screen L — account details, account/security actions (pushed pages) and Log Out. */
 @Component({
@@ -58,6 +60,8 @@ import { NotificationsStore } from '../../notifications/notifications.store';
 export class ProfilePage implements ViewWillEnter {
   private readonly auth = inject(AuthService);
   private readonly confirmService = inject(ConfirmService);
+  private readonly outbox = inject(ReportOutboxStore);
+  private readonly sync = inject(ReportSyncService);
   private readonly notifications = inject(NotificationsStore);
   readonly user = inject(SessionStore).user;
   readonly appVersion = inject(APP_ENVIRONMENT).appVersion;
@@ -94,13 +98,32 @@ export class ProfilePage implements ViewWillEnter {
   }
 
   async confirmLogout(): Promise<void> {
-    const confirmed = await this.confirmService.confirm({
-      header: 'Log out?',
-      message: "You'll need to sign in again to see your reports.",
-      confirmText: 'Log Out',
-      destructive: true,
-    });
+    // Reports saved on this phone and not sent yet are deleted by logging out: say so, and how many. Read them
+    // from the phone first: right after an offline start or an account switch the list may still be loading.
+    const userId = this.user()?.id;
+    const unsent = userId ? (await this.outbox.itemsFor(userId)).length : 0;
+    const confirmed = await this.confirmService.confirm(
+      unsent > 0 || this.outbox.unavailable()
+        ? {
+            header: 'Delete unsent reports?',
+            message: unsent
+              ? `You have ${unsent === 1 ? 'a report' : `${unsent} reports`} saved on this phone that ` +
+                `${unsent === 1 ? "hasn't" : "haven't"} been sent to SEEFIX yet. Logging out permanently deletes ` +
+                `${unsent === 1 ? 'it' : 'them'} from this phone.`
+              : "Reports saved on this phone couldn't be read. Logging out permanently deletes them from this phone.",
+            confirmText: 'Delete and Log Out',
+            destructive: true,
+          }
+        : {
+            header: 'Log out?',
+            message: "You'll need to sign in again to see your reports.",
+            confirmText: 'Log Out',
+            destructive: true,
+          },
+    );
     if (!confirmed) return;
+    // No send may write while the saved reports are being deleted.
+    const release = await this.sync.pause();
     try {
       await this.auth.logout();
     } catch (error) {
@@ -114,6 +137,8 @@ export class ProfilePage implements ViewWillEnter {
         destructive: true,
       });
       if (anyway) await this.auth.logout({ keepLocalData: true });
+    } finally {
+      release();
     }
   }
 }

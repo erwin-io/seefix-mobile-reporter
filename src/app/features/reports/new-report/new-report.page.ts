@@ -37,15 +37,13 @@ import { EmptyStateComponent } from '../../../shared/components/empty-state/empt
 import { locationText, statusLabel } from '../../../shared/formatters/report-status-label';
 import { ConfirmService } from '../../../shared/services/confirm.service';
 import { ReferenceStore } from '../../reference/reference.store';
-import { OutboxReason, ReportAlreadyWaitingError, ReportOutboxStore, sha256Hex } from '../outbox/report-outbox.store';
+import { photoCountText, waitingReason } from '../outbox/delivery-status';
+import { ReportAlreadyWaitingError, ReportOutboxStore, sha256Hex } from '../outbox/report-outbox.store';
 import { ReportSyncService } from '../outbox/report-sync.service';
 import { ReportsStore } from '../reports.store';
 import { HasPendingChanges } from './pending-changes.guard';
 import { ImageRejectedError, PhotoPermissionError, PhotoPickerService, SelectedPhoto } from './photo-picker.service';
-import { ReportDraftStore } from './report-draft.store';
-
-/** Sentinel for "my location isn't listed" -> free-text building/floor/area. */
-export const OTHER_LOCATION = '__other__';
+import { OTHER_LOCATION, ReportDraftStore } from './report-draft.store';
 
 interface GpsFix {
   lat: number;
@@ -415,8 +413,7 @@ export class NewReportPage implements ViewWillEnter, OnDestroy, HasPendingChange
 
       const report = received as CreateReportResponse | null;
       if (report) {
-        await this.toast(`Report ${report.reportNo} submitted.`, 'success');
-        // Replace this page so Back from the detail returns to the originating tab.
+        // The app announces "received by SEEFIX"; replace this page so Back from the detail returns to the tab.
         await this.nav.navigateForward(['/reports', report.id], { replaceUrl: true });
       } else {
         await this.explainSaved(id);
@@ -501,7 +498,8 @@ export class NewReportPage implements ViewWillEnter, OnDestroy, HasPendingChange
     const alert = await this.alerts.create({ header, message, buttons: ['OK'] });
     await alert.present();
     await alert.onDidDismiss();
-    await this.nav.navigateRoot('/tabs/home');
+    // The saved report's own page: delivery status, Send now, and the photos as saved.
+    await this.nav.navigateForward(['/reports/local', id], { replaceUrl: true });
   }
 
   /** Blocked at submit time: keep the draft and offer the active report. */
@@ -585,21 +583,4 @@ function submitFailureMessage(error: unknown): string {
 
 function round6(value: number): number {
   return Math.round(value * 1e6) / 1e6;
-}
-
-const WAITING_REASONS: Record<Exclude<OutboxReason, null>, string> = {
-  offline: 'No internet connection',
-  slow: 'Slow connection',
-  server: "SEEFIX can't be reached",
-  upload: "The photo upload service can't be reached",
-  busy: 'SEEFIX is busy',
-  session: 'Sign in to send it',
-};
-
-export function waitingReason(reason: OutboxReason): string {
-  return reason ? WAITING_REASONS[reason] : 'Not yet submitted';
-}
-
-function photoCountText(count: number): string {
-  return `${count} photo${count === 1 ? '' : 's'}`;
 }
