@@ -20,9 +20,10 @@ import {
   RefresherCustomEvent,
   ViewWillEnter,
 } from '@ionic/angular';
-import { AuthService } from '../../../core/auth/auth.service';
+import { AuthService, LocalDataNotDeletedError } from '../../../core/auth/auth.service';
 import { SessionStore } from '../../../core/auth/session.store';
 import { APP_ENVIRONMENT } from '../../../core/config/app-environment';
+import { ConnectivityBannerComponent } from '../../../shared/components/connectivity-banner/connectivity-banner.component';
 import { NotificationBellComponent } from '../../../shared/components/notification-bell/notification-bell.component';
 import { humanize } from '../../../shared/formatters/report-status-label';
 import { ConfirmService } from '../../../shared/services/confirm.service';
@@ -34,6 +35,7 @@ import { NotificationsStore } from '../../notifications/notifications.store';
   templateUrl: 'profile.page.html',
   styleUrls: ['profile.page.scss'],
   imports: [
+    ConnectivityBannerComponent,
     IonHeader,
     IonToolbar,
     IonTitle,
@@ -98,6 +100,20 @@ export class ProfilePage implements ViewWillEnter {
       confirmText: 'Log Out',
       destructive: true,
     });
-    if (confirmed) await this.auth.logout();
+    if (!confirmed) return;
+    try {
+      await this.auth.logout();
+    } catch (error) {
+      if (!(error instanceof LocalDataNotDeletedError)) throw error;
+      const anyway = await this.confirmService.confirm({
+        header: "Couldn't delete saved data",
+        message:
+          "Data saved on this phone for your account couldn't be deleted. If you log out anyway, it stays on this " +
+          'phone and only appears again when you sign in with this account.',
+        confirmText: 'Log Out Anyway',
+        destructive: true,
+      });
+      if (anyway) await this.auth.logout({ keepLocalData: true });
+    }
   }
 }

@@ -1,15 +1,24 @@
 import { Injectable, inject } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NavController } from '@ionic/angular';
 import { firstValueFrom } from 'rxjs';
 import { AppError, ERROR_COPY, SESSION_ENDING_CODES, mapHttpError } from '../http/api-error.mapper';
+import { AppResumeService } from '../lifecycle/app-resume.service';
 import { AuthUser, LoginRequest, RegisterRequest, RegisterResponse, SessionNotice } from '../models/auth.model';
+import { LocalDbService } from '../storage/local-db.service';
 import { AccountApiService } from './account.api.service';
 import { AuthApiService } from './auth.api.service';
 import { AuthFlowStore } from './auth-flow.store';
 import { SecureTokenStorage } from './secure-token-storage.service';
 import { SessionStore } from './session.store';
+import { VerifiedIdentityStore } from './verified-identity.store';
 
 export const REPORTER_ROLE = 'REPORTER';
+
+/** Signing out could not delete this Reporter's data on the phone; the session is unchanged. */
+export class LocalDataNotDeletedError extends Error {
+  override readonly name = 'LocalDataNotDeletedError';
+}
 
 /** Session lifecycle: sign-in, bootstrap, sign-out and forced re-authentication. */
 @Injectable({ providedIn: 'root' })
@@ -19,9 +28,19 @@ export class AuthService {
   private readonly session = inject(SessionStore);
   private readonly flow = inject(AuthFlowStore);
   private readonly storage = inject(SecureTokenStorage);
+  private readonly identity = inject(VerifiedIdentityStore);
+  private readonly localDb = inject(LocalDbService);
   private readonly nav = inject(NavController);
   private bootstrapPromise: Promise<void> | null = null;
+  private reverifyPromise: Promise<void> | null = null;
   private ending = false;
+
+  constructor() {
+    // An offline-opened session is checked with the server as soon as the app is back online or in front.
+    inject(AppResumeService)
+      .resumed$.pipe(takeUntilDestroyed())
+      .subscribe(() => void this.reverify());
+  }
 
   /** Resolves once the stored session has been checked. Safe to call repeatedly. */
   ensureBootstrapped(): Promise<void> {
@@ -46,7 +65,7 @@ export class AuthService {
     const { user } = await firstValueFrom(this.authApi.meWithToken(response.accessToken));
     if (user.role !== REPORTER_ROLE) throw roleDenied();
     await this.storage.set(response.accessToken);
-    this.session.setAuthenticated(user, response.accessToken);
+    await this.confirmed(user, response.accessToken);
     this.bootstrapPromise = Promise.resolve();
     return user;
   }
@@ -59,11 +78,46 @@ export class AuthService {
   /** Refreshes the signed-in user's profile from /api/auth/me. */
   async refreshMe(): Promise<AuthUser> {
     const { user } = await firstValueFrom(this.accountApi.me());
-    this.session.updateUser(user);
+    const token = this.session.accessToken();
+    if (token) await this.confirmed(user, token);
+    else this.session.updateUser(user);
     return user;
   }
 
-  async logout(): Promise<void> {
+  /**
+   * Checks an offline-opened session with the server. A proven-invalid token ends the session (offline data is
+   * kept for that Reporter); a network problem leaves it as it is.
+   */
+  reverify(): Promise<void> {
+    const token = this.session.accessToken();
+    if (!token || !this.session.isAuthenticated() || this.session.verified()) return Promise.resolve();
+    this.reverifyPromise ??= firstValueFrom(this.authApi.meWithToken(token))
+      .then(async ({ user }) => {
+        if (user.role !== REPORTER_ROLE) await this.handleSessionEnded('ROLE_DENIED');
+        else if (this.session.accessToken() === token) await this.confirmed(user, token);
+      })
+      .catch(async (error: unknown) => {
+        const notice = bootstrapFailureNotice(mapHttpError(error));
+        if (notice) await this.handleSessionEnded(notice);
+      })
+      .finally(() => (this.reverifyPromise = null));
+    return this.reverifyPromise;
+  }
+
+  /**
+   * Deliberate sign-out. Deletes this Reporter's data on the phone first, while still signed in. If that fails,
+   * nothing changes and LocalDataNotDeletedError is thrown, unless `keepLocalData` (the Reporter chose "Log out
+   * anyway"): the data then stays, unreadable until this Reporter signs in again.
+   */
+  async logout(options: { keepLocalData?: boolean } = {}): Promise<void> {
+    const userId = this.session.user()?.id;
+    if (userId && !options.keepLocalData) {
+      try {
+        await this.localDb.wipeUser(userId);
+      } catch {
+        throw new LocalDataNotDeletedError();
+      }
+    }
     await this.endSession('SIGNED_OUT');
   }
 
@@ -90,6 +144,9 @@ export class AuthService {
     this.ending = true;
     try {
       await this.storage.clear();
+      // On-device data is not touched here: logout() deletes it before a deliberate sign-out, and an expired or
+      // revoked session keeps it (unreadable until the same Reporter signs in again).
+      await this.identity.forget();
       this.session.setUnauthenticated(notice);
       this.bootstrapPromise = Promise.resolve();
       await beforeNavigate?.();
@@ -110,22 +167,34 @@ export class AuthService {
       const { user } = await firstValueFrom(this.authApi.meWithToken(token));
       if (user.role !== REPORTER_ROLE) {
         await this.storage.clear();
+        await this.identity.forget();
         this.session.setUnauthenticated('ROLE_DENIED');
         return;
       }
-      this.session.setAuthenticated(user, token);
+      await this.confirmed(user, token);
     } catch (error) {
       const appError = mapHttpError(error);
       const notice = bootstrapFailureNotice(appError);
       if (notice) {
         await this.storage.clear();
+        await this.identity.forget();
         this.session.setUnauthenticated(notice);
         if (notice === 'VERIFICATION_REQUIRED') this.flow.verificationEmail.set(null);
-      } else {
-        // Network or server trouble is not a bad credential: keep it and let the user retry.
-        this.session.setOfflineUnverified(token);
+        return;
       }
+      // Network or server trouble is not a bad credential: keep it. With the Reporter verified earlier on this
+      // token, open the app offline as that Reporter; otherwise the launch screen offers Retry.
+      const known = await this.identity.restore(token);
+      if (known) this.session.setAuthenticated(known, token, false);
+      else this.session.setOfflineUnverified(token);
     }
+  }
+
+  /** The server just confirmed this Reporter and token. */
+  private async confirmed(user: AuthUser, token: string): Promise<void> {
+    this.session.setAuthenticated(user, token, true);
+    await this.identity.remember(user, token);
+    void this.localDb.requestPersistence();
   }
 }
 

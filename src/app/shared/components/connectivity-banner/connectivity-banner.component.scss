@@ -1,0 +1,25 @@
+.connectivity-banner {
+  --min-height: 32px;
+  --background: var(--ion-color-medium-tint);
+  --color: var(--ion-color-dark);
+  font-size: 0.8125rem;
+
+  &.server-down {
+    --background: var(--ion-color-warning-tint);
+  }
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 16px;
+}
+
+.title {
+  font-weight: 600;
+}
+
+.detail {
+  opacity: 0.85;
+}

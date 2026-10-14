@@ -36,6 +36,7 @@ import { APP_ENVIRONMENT } from '../../../core/config/app-environment';
 import { AppError, mapHttpError } from '../../../core/http/api-error.mapper';
 import { AppResumeService } from '../../../core/lifecycle/app-resume.service';
 import { ReportDetail } from '../../../core/models/report.model';
+import { ConnectivityBannerComponent } from '../../../shared/components/connectivity-banner/connectivity-banner.component';
 import { DetailCardComponent } from '../../../shared/components/detail-card/detail-card.component';
 import { EmptyStateComponent } from '../../../shared/components/empty-state/empty-state.component';
 import { ReportStatusChipComponent } from '../../../shared/components/report-status-chip/report-status-chip.component';
@@ -64,6 +65,7 @@ const PRE_REVIEW_STATUSES = new Set(['SUBMITTED', 'PENDING_REVIEW']);
   templateUrl: 'report-detail.page.html',
   styleUrls: ['report-detail.page.scss'],
   imports: [
+    ConnectivityBannerComponent,
     DatePipe,
     IonHeader,
     IonToolbar,

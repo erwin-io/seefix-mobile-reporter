@@ -1,0 +1,9 @@
+@if (copy(); as copy) {
+  <ion-toolbar class="connectivity-banner" [class.server-down]="state() === 'server-down'" role="status" aria-live="polite">
+    <div class="row">
+      <ion-icon [name]="copy.icon" aria-hidden="true"></ion-icon>
+      <span class="title">{{ copy.title }}</span>
+      <span class="detail">· {{ copy.detail }}</span>
+    </div>
+  </ion-toolbar>
+}

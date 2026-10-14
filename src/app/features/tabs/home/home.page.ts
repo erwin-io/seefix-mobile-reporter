@@ -22,6 +22,7 @@ import { SessionStore } from '../../../core/auth/session.store';
 import { AppResumeService } from '../../../core/lifecycle/app-resume.service';
 import { NotificationDto } from '../../../core/models/notification.model';
 import { ActiveReportBannerComponent } from '../../../shared/components/active-report-banner/active-report-banner.component';
+import { ConnectivityBannerComponent } from '../../../shared/components/connectivity-banner/connectivity-banner.component';
 import { EmptyStateComponent } from '../../../shared/components/empty-state/empty-state.component';
 import { LoadingStateComponent } from '../../../shared/components/loading-state/loading-state.component';
 import { NotificationBellComponent } from '../../../shared/components/notification-bell/notification-bell.component';
@@ -58,6 +59,7 @@ const RECENT_UPDATES = 3;
     NotificationItemComponent,
     ReportListItemComponent,
     ActiveReportBannerComponent,
+    ConnectivityBannerComponent,
     ReportFabComponent,
     EmptyStateComponent,
     LoadingStateComponent,

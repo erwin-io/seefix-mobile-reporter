@@ -1,3 +1,12 @@
+import 'fake-indexeddb/auto';
+import { IDBFactory } from 'fake-indexeddb';
+
+// jsdom has no IndexedDB: fake-indexeddb is an in-memory implementation. A fresh database per test keeps
+// on-device data from leaking between tests.
+beforeEach(() => {
+  globalThis.indexedDB = new IDBFactory();
+});
+
 // Polyfills for running unit tests under jsdom (the default Vitest environment).
 // Ionic components such as ion-menu and ion-split-pane query `window.matchMedia`,
 // which jsdom does not implement.
