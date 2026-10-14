@@ -2,10 +2,12 @@ import { DestroyRef, Injectable, computed, inject, signal } from '@angular/core'
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { firstValueFrom } from 'rxjs';
 import { SessionStore } from '../../core/auth/session.store';
+import { ConnectivityService } from '../../core/connectivity/connectivity.service';
 import { AppError, mapHttpError } from '../../core/http/api-error.mapper';
 import { AppResumeService } from '../../core/lifecycle/app-resume.service';
 import { ActiveReportDto, ReportSummary } from '../../core/models/report.model';
 import { LatestRequest } from '../../shared/utils/latest-request';
+import { ReportOutboxStore } from './outbox/report-outbox.store';
 import { REPORT_LIST_MAX, ReportsApiService } from './reports.api.service';
 
 export const DEFAULT_REPORT_LIMIT = 30;
@@ -22,6 +24,8 @@ export type SubmitEligibility = 'unknown' | 'loading' | 'allowed' | 'blocked' | 
 export class ReportsStore {
   private readonly api = inject(ReportsApiService);
   private readonly session = inject(SessionStore);
+  private readonly outbox = inject(ReportOutboxStore);
+  private readonly connectivity = inject(ConnectivityService);
   private readonly _items = signal<ReportSummary[]>([]);
   private readonly _loading = signal(false);
   private readonly _error = signal<AppError | null>(null);
@@ -46,6 +50,18 @@ export class ReportsStore {
   readonly eligibility = this._eligibility.asReadonly();
   readonly activeReport = this._activeReport.asReadonly();
   readonly canSubmit = computed(() => this._eligibility() === 'allowed');
+  /**
+   * A new report may be started when no earlier report is waiting on this phone (and the saved reports could be
+   * read), and the server allows it or can't be asked: its check failed, or it is unknown while offline or SEEFIX is
+   * unreachable. The report is then saved on the phone and the server decides when it is sent (plan D7).
+   */
+  readonly canStartReport = computed(() => {
+    if (this.outbox.hasUnsent() || this.outbox.unavailable()) return false;
+    const eligibility = this._eligibility();
+    if (eligibility === 'allowed' || eligibility === 'error') return true;
+    const unreachable = this.connectivity.state() === 'offline' || this.connectivity.state() === 'server-down';
+    return unreachable && (eligibility === 'unknown' || eligibility === 'loading');
+  });
 
   constructor() {
     this.session.registerReset(() => this.reset());

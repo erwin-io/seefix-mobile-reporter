@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { IonFab, IonFabButton, IonIcon, NavController, ToastController } from '@ionic/angular';
+import { ReportOutboxStore } from '../../../features/reports/outbox/report-outbox.store';
 import { ReportsStore } from '../../../features/reports/reports.store';
 import { statusLabel } from '../../formatters/report-status-label';
 import { ConfirmService } from '../../services/confirm.service';
@@ -22,11 +23,13 @@ export class ReportFabComponent {
   private readonly confirm = inject(ConfirmService);
   private readonly toasts = inject(ToastController);
 
-  readonly allowed = this.store.canSubmit;
+  private readonly outbox = inject(ReportOutboxStore);
+
+  readonly allowed = this.store.canStartReport;
   readonly ariaLabel = computed(() => {
+    if (this.store.canStartReport()) return 'Report an Issue';
+    if (this.outbox.hasUnsent()) return 'Report an Issue, unavailable while a saved report is waiting to send';
     switch (this.store.eligibility()) {
-      case 'allowed':
-        return 'Report an Issue';
       case 'blocked':
         return 'Report an Issue, unavailable while your current report is in progress';
       case 'error':
@@ -38,8 +41,20 @@ export class ReportFabComponent {
 
   async onTap(): Promise<void> {
     const state = this.store.eligibility();
-    if (state === 'allowed') {
+    // Allowed, or SEEFIX can't be asked right now (offline): the form opens and the report is saved on the phone.
+    if (this.store.canStartReport()) {
       await this.nav.navigateForward('/reports/new');
+      return;
+    }
+    if (this.outbox.hasUnsent()) {
+      await this.confirm.confirm({
+        header: 'Report waiting to send',
+        message:
+          "A report saved on this phone hasn't reached SEEFIX yet. It is sent automatically while the app is open " +
+          'and online. You can start a new report after that.',
+        confirmText: 'OK',
+        cancelText: 'Close',
+      });
       return;
     }
     if (state === 'blocked') {

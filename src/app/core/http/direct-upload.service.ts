@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable, catchError, concatMap, from, map, switchMap, throwError, timeout, toArray } from 'rxjs';
 import { APP_ENVIRONMENT } from '../config/app-environment';
-import { ApiClient } from './api-client.service';
+import { ApiClient, ApiRequestOptions } from './api-client.service';
 import { mapHttpError } from './api-error.mapper';
 
 export type UploadPurpose = 'report-image';
@@ -12,7 +12,7 @@ export interface UploadFile {
   fileName: string;
 }
 
-interface SignedUpload {
+export interface SignedUpload {
   uploadUrl: string;
   fields: Record<string, string | number>;
 }
@@ -30,7 +30,7 @@ export class DirectUploadService {
 
   /** Uploads one file at a time (gentler on mobile data) and returns the public IDs in the same order. */
   upload(purpose: UploadPurpose, files: UploadFile[]): Observable<string[]> {
-    return this.api.post<SignedUpload>('/api/uploads/sign', { purpose }).pipe(
+    return this.sign(purpose).pipe(
       switchMap((signed) =>
         from(files).pipe(
           concatMap((file) => this.send(signed, file)),
@@ -40,7 +40,13 @@ export class DirectUploadService {
     );
   }
 
-  private send(signed: SignedUpload, file: UploadFile): Observable<string> {
+  /** One signature (valid 1 hour) for any number of uploads. */
+  sign(purpose: UploadPurpose, options?: ApiRequestOptions): Observable<SignedUpload> {
+    return this.api.post<SignedUpload>('/api/uploads/sign', { purpose }, options);
+  }
+
+  /** Uploads one file with an existing signature; emits its public ID. */
+  send(signed: SignedUpload, file: UploadFile): Observable<string> {
     const form = new FormData();
     for (const [key, value] of Object.entries(signed.fields)) form.append(key, String(value));
     form.append('file', file.blob, file.fileName);

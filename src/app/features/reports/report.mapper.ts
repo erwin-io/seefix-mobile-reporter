@@ -1,4 +1,5 @@
 import {
+  ActiveReportDto,
   ReportDetail,
   ReportDetailResponse,
   ReportSummary,
@@ -6,6 +7,21 @@ import {
   TimelineEvent,
 } from '../../core/models/report.model';
 import { locationText } from '../../shared/formatters/report-status-label';
+
+/** Validates `error.details.activeReport` from a 409 before trusting it. */
+export function toActiveReport(value: unknown): ActiveReportDto | null {
+  if (!value || typeof value !== 'object') return null;
+  const candidate = value as Partial<ActiveReportDto>;
+  return typeof candidate.id === 'string' && typeof candidate.reportNo === 'string' && typeof candidate.status === 'string'
+    ? {
+        id: candidate.id,
+        reportNo: candidate.reportNo,
+        status: candidate.status,
+        agentStatus: candidate.agentStatus ?? null,
+        createdAt: candidate.createdAt,
+      }
+    : null;
+}
 
 /** camelCase list DTO -> view model. */
 export function toReportSummary(dto: ReportSummaryDto): ReportSummary {

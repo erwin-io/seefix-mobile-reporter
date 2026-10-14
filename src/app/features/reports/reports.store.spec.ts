@@ -189,3 +189,22 @@ describe('ReportsStore eligibility across account changes', () => {
     expect(store.eligibility()).toBe('unknown');
   });
 });
+
+describe('ReportsStore canStartReport (plan D7)', () => {
+  it('offline with eligibility unknown: a report can be started at once, without waiting for a failed check', () => {
+    TestBed.configureTestingModule({ providers: [provideHttpClient(), provideHttpClientTesting()] });
+    TestBed.inject(SessionStore).setAuthenticated(REPORTER_USER, 't');
+    (TestBed.inject(AppResumeService) as unknown as { _online: { set(v: boolean): void } })._online.set(false);
+    const store = TestBed.inject(ReportsStore);
+
+    expect(store.eligibility()).toBe('unknown');
+    expect(store.canStartReport()).toBe(true);
+    TestBed.inject(HttpTestingController).expectNone(apiUrl('/api/reports/my/active'));
+  });
+
+  it('online with eligibility unknown: waits for the server', () => {
+    TestBed.configureTestingModule({ providers: [provideHttpClient(), provideHttpClientTesting()] });
+    TestBed.inject(SessionStore).setAuthenticated(REPORTER_USER, 't');
+    expect(TestBed.inject(ReportsStore).canStartReport()).toBe(false);
+  });
+});

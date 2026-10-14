@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { Observable, map, switchMap } from 'rxjs';
-import { ApiClient } from '../../core/http/api-client.service';
+import { ApiClient, ApiRequestOptions } from '../../core/http/api-client.service';
 import { DirectUploadService } from '../../core/http/direct-upload.service';
 import {
   ActiveReportResponse,
@@ -64,22 +64,38 @@ export class ReportsApiService {
 
   /** Uploads the photos straight to Cloudinary, then creates the report with their public IDs. */
   create(payload: NewReportPayload): Observable<CreateReportResponse> {
-    return this.uploads.upload('report-image', payload.images).pipe(
-      switchMap((imagePublicIds) => {
-        const useLocationId = !!payload.locationId; // Node replaces textual location with the canonical facility snapshot.
-        const hasGps = payload.gpsLat != null && payload.gpsLng != null;
-        return this.api.post<CreateReportResponse>('/api/reports', {
-          imagePublicIds,
-          description: trimmed(payload.description),
-          notes: trimmed(payload.notes),
-          locationId: useLocationId ? payload.locationId : undefined,
-          building: useLocationId ? undefined : trimmed(payload.building),
-          floor: useLocationId ? undefined : trimmed(payload.floor),
-          roomOrArea: useLocationId ? undefined : trimmed(payload.roomOrArea),
-          gpsLat: hasGps ? payload.gpsLat : undefined,
-          gpsLng: hasGps ? payload.gpsLng : undefined,
-        });
-      }),
+    return this.uploads
+      .upload('report-image', payload.images)
+      .pipe(switchMap((imagePublicIds) => this.createFromUploads(payload, imagePublicIds)));
+  }
+
+  /**
+   * Creates the report from photos already uploaded to Cloudinary. With `clientReportId` (offline outbox) a retry
+   * returns the report an earlier attempt created (seefix-api D1); `imageDigests` are the photos' SHA-256 values.
+   */
+  createFromUploads(
+    payload: Omit<NewReportPayload, 'images'>,
+    imagePublicIds: string[],
+    idempotency?: { clientReportId: string; imageDigests: string[] },
+    options?: ApiRequestOptions,
+  ): Observable<CreateReportResponse> {
+    const useLocationId = !!payload.locationId; // Node replaces textual location with the canonical facility snapshot.
+    const hasGps = payload.gpsLat != null && payload.gpsLng != null;
+    return this.api.post<CreateReportResponse>(
+      '/api/reports',
+      {
+        imagePublicIds,
+        description: trimmed(payload.description),
+        notes: trimmed(payload.notes),
+        locationId: useLocationId ? payload.locationId : undefined,
+        building: useLocationId ? undefined : trimmed(payload.building),
+        floor: useLocationId ? undefined : trimmed(payload.floor),
+        roomOrArea: useLocationId ? undefined : trimmed(payload.roomOrArea),
+        gpsLat: hasGps ? payload.gpsLat : undefined,
+        gpsLng: hasGps ? payload.gpsLng : undefined,
+        ...idempotency,
+      },
+      options,
     );
   }
 }

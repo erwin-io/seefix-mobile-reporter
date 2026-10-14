@@ -25,23 +25,24 @@ import {
   ToastController,
   ViewWillEnter,
 } from '@ionic/angular';
-import { firstValueFrom } from 'rxjs';
+import { debounceTime } from 'rxjs';
 import { SessionStore } from '../../../core/auth/session.store';
 import { APP_ENVIRONMENT } from '../../../core/config/app-environment';
-import { AppError, ERROR_COPY, mapHttpError } from '../../../core/http/api-error.mapper';
-import { AppResumeService } from '../../../core/lifecycle/app-resume.service';
+import { ConnectivityService } from '../../../core/connectivity/connectivity.service';
 import { BuildingDto, FacilityLocationDto } from '../../../core/models/reference.model';
-import { ActiveReportDto } from '../../../core/models/report.model';
+import { CreateReportResponse } from '../../../core/models/report.model';
+import { StorageFullError } from '../../../core/storage/local-db.service';
 import { ConnectivityBannerComponent } from '../../../shared/components/connectivity-banner/connectivity-banner.component';
 import { EmptyStateComponent } from '../../../shared/components/empty-state/empty-state.component';
 import { locationText, statusLabel } from '../../../shared/formatters/report-status-label';
 import { ConfirmService } from '../../../shared/services/confirm.service';
-import { NotificationsStore } from '../../notifications/notifications.store';
 import { ReferenceStore } from '../../reference/reference.store';
-import { ReportsApiService } from '../reports.api.service';
+import { OutboxReason, ReportAlreadyWaitingError, ReportOutboxStore, sha256Hex } from '../outbox/report-outbox.store';
+import { ReportSyncService } from '../outbox/report-sync.service';
 import { ReportsStore } from '../reports.store';
 import { HasPendingChanges } from './pending-changes.guard';
 import { ImageRejectedError, PhotoPermissionError, PhotoPickerService, SelectedPhoto } from './photo-picker.service';
+import { ReportDraftStore } from './report-draft.store';
 
 /** Sentinel for "my location isn't listed" -> free-text building/floor/area. */
 export const OTHER_LOCATION = '__other__';
@@ -82,11 +83,12 @@ export class NewReportPage implements ViewWillEnter, OnDestroy, HasPendingChange
   private readonly env = inject(APP_ENVIRONMENT);
   private readonly picker = inject(PhotoPickerService);
   private readonly reference = inject(ReferenceStore);
-  private readonly api = inject(ReportsApiService);
   private readonly reports = inject(ReportsStore);
-  private readonly notifications = inject(NotificationsStore);
+  private readonly outbox = inject(ReportOutboxStore);
+  private readonly sync = inject(ReportSyncService);
+  private readonly draft = inject(ReportDraftStore);
+  private readonly connectivity = inject(ConnectivityService);
   private readonly session = inject(SessionStore);
-  private readonly online = inject(AppResumeService).isOnline;
   private readonly nav = inject(NavController);
   private readonly actionSheets = inject(ActionSheetController);
   private readonly alerts = inject(AlertController);
@@ -129,9 +131,11 @@ export class NewReportPage implements ViewWillEnter, OnDestroy, HasPendingChange
   /** Shared one-active-report eligibility (see ReportsStore). */
   readonly eligibility = this.reports.eligibility;
   readonly activeReport = this.reports.activeReport;
+  /** What the gate shows before the form opens: a report still waiting on this phone blocks like an active one. */
+  readonly gate = computed(() => (this.outbox.hasUnsent() ? 'unsent' : this.eligibility()));
   /**
-   * The form opens only after the server confirmed a report may be submitted.
-   * Once open it stays open (keeping the draft); the rule is re-checked right before upload.
+   * The form opens when the server allows a new report, or can't be asked (offline: the report is saved on the
+   * phone and the server decides when it is sent). Once open it stays open; the rule is re-checked before sending.
    */
   readonly unlocked = signal(false);
   readonly statusLabel = statusLabel;
@@ -140,29 +144,35 @@ export class NewReportPage implements ViewWillEnter, OnDestroy, HasPendingChange
   /** Lets "View active report" leave without the discard prompt; the draft stays in the page stack. */
   private leavingToActiveReport = false;
   private confirmingSubmit = false;
+  private draftChecked = false;
 
   constructor() {
-    // Any server-confirmed "allowed" opens the form. This includes a background re-check (back online / app
-    // resumed) that succeeds after this page's own check failed, which otherwise left it on "Checking…".
+    this.draft.open();
+    // Also opens after a background re-check (back online / app resumed) that succeeds after this page's own
+    // check failed, which otherwise left it on "Checking…".
     effect(() => {
-      if (this.eligibility() === 'allowed') this.unlocked.set(true);
+      if (this.reports.canStartReport()) this.unlocked.set(true);
     });
     this.form.controls.buildingId.valueChanges.pipe(takeUntilDestroyed()).subscribe((buildingId) => {
       this.form.controls.locationId.setValue('');
       this.locations.set([]);
       if (buildingId && buildingId !== OTHER_LOCATION) void this.loadLocations(buildingId);
     });
+    // Autosave the text fields on the phone (photos are saved as they are added).
+    this.form.valueChanges.pipe(debounceTime(500), takeUntilDestroyed()).subscribe(() => void this.saveDraftForm());
   }
 
   ionViewWillEnter(): void {
     this.leavingToActiveReport = false;
     if (!this.unlocked()) void this.checkEligibility();
     if (this.referenceState() !== 'ready') void this.loadBuildings();
+    if (!this.draftChecked) void this.restoreDraft();
   }
 
   /** Pre-flight before any camera/gallery access: also covers direct deep links to /reports/new. */
   async checkEligibility(): Promise<void> {
-    if ((await this.reports.refreshEligibility()) === true) this.unlocked.set(true);
+    await this.reports.refreshEligibility();
+    if (this.reports.canStartReport()) this.unlocked.set(true);
   }
 
   viewActiveReport(): void {
@@ -207,12 +217,13 @@ export class NewReportPage implements ViewWillEnter, OnDestroy, HasPendingChange
     this.picker.release(photo);
     this.photos.update((photos) => photos.filter((item) => item.id !== photo.id));
     this.photosTouched.set(true);
+    void this.draft.removePhoto(photo.id);
   }
 
   private async capture(): Promise<void> {
     try {
       const photo = await this.picker.takePhoto();
-      if (photo) this.photos.update((photos) => [...photos, photo].slice(0, this.maxImages));
+      if (photo) this.addPhotos([photo]);
     } catch (error) {
       await this.handlePhotoError(error);
     }
@@ -221,11 +232,55 @@ export class NewReportPage implements ViewWillEnter, OnDestroy, HasPendingChange
   private async pickFromGallery(): Promise<void> {
     try {
       const { photos, rejected } = await this.picker.chooseFromGallery(this.remainingSlots());
-      if (photos.length) this.photos.update((current) => [...current, ...photos].slice(0, this.maxImages));
+      if (photos.length) this.addPhotos(photos);
       if (rejected > 0) await this.toast(this.uploadRules());
     } catch (error) {
       await this.handlePhotoError(error);
     }
+  }
+
+  private addPhotos(added: SelectedPhoto[]): void {
+    const accepted = added.slice(0, this.remainingSlots());
+    this.photos.update((photos) => [...photos, ...accepted]);
+    for (const photo of accepted) void this.draft.addPhoto(photo);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Draft on the phone
+  // ---------------------------------------------------------------------------
+
+  /** Brings back an unfinished report after the app was closed (only into an untouched form). */
+  private async restoreDraft(): Promise<void> {
+    this.draftChecked = true;
+    const saved = await this.draft.load();
+    if (!saved || this.form.dirty || this.photos().length) return;
+    const { record, photos } = saved;
+    if (!photos.length && !Object.values(record.form).some((value) => value)) return;
+    this.form.patchValue(record.form);
+    // Choosing the building clears and reloads its locations; restore the chosen location once they are there.
+    const buildingId = record.form['buildingId'];
+    if (buildingId && buildingId !== OTHER_LOCATION) {
+      await this.loadLocations(buildingId);
+      this.form.controls.locationId.setValue(record.form['locationId'] ?? '');
+    }
+    this.form.markAsDirty();
+    this.gps.set(record.gps);
+    this.photos.set(
+      photos.slice(0, this.maxImages).map((photo) => ({
+        id: photo.id,
+        blob: photo.blob,
+        fileName: photo.fileName,
+        mimeType: photo.mimeType,
+        size: photo.blob.size,
+        previewUrl: URL.createObjectURL(photo.blob),
+      })),
+    );
+    await this.toast('We restored the report you were writing.');
+  }
+
+  private saveDraftForm(): Promise<void> {
+    if (this.submitted) return Promise.resolve();
+    return this.draft.saveForm(this.form.getRawValue(), this.gps());
   }
 
   private async handlePhotoError(error: unknown): Promise<void> {
@@ -286,6 +341,7 @@ export class NewReportPage implements ViewWillEnter, OnDestroy, HasPendingChange
         lng: round6(position.coords.longitude),
         accuracy: position.coords.accuracy ? Math.round(position.coords.accuracy) : null,
       });
+      void this.saveDraftForm();
     } catch {
       await this.toast("We couldn't get your current location. You can still describe the location above.");
     } finally {
@@ -295,34 +351,38 @@ export class NewReportPage implements ViewWillEnter, OnDestroy, HasPendingChange
 
   removeGps(): void {
     this.gps.set(null);
+    void this.saveDraftForm();
   }
 
   // ---------------------------------------------------------------------------
   // Submit
   // ---------------------------------------------------------------------------
 
+  /**
+   * Saves the report and its original photos on the phone first; only after that save succeeded does it try to
+   * send. Offline, slow, SEEFIX or Cloudinary unreachable: the report stays saved and is sent automatically later
+   * with the same clientReportId, so a repeat never creates a second report.
+   */
   async submit(): Promise<void> {
-    if (this.submitting()) return; // in-flight lock: never send a second upload
+    if (this.submitting()) return; // in-flight lock
     this.form.markAllAsTouched();
     this.photosTouched.set(true);
     if (this.form.invalid || this.photos().length === 0) {
       await this.toast(this.photos().length === 0 ? 'Add at least one photo of the issue.' : 'Please complete the required fields.');
       return;
     }
-    if (!this.online()) {
-      await this.toast(ERROR_COPY.offline);
-      return;
-    }
 
-    // Confirm before uploading; the flag stops a second tap from opening another dialog.
+    // Confirm first; the flag stops a second tap from opening another dialog.
     if (this.confirmingSubmit) return;
     this.confirmingSubmit = true;
     const photoCount = this.photos().length;
+    const offline = this.connectivity.state() === 'offline';
     const confirmed = await this.confirm
       .confirm({
         header: 'Submit report?',
         message:
-          `Your report with ${photoCount} photo${photoCount === 1 ? '' : 's'} will be sent to the Maintenance Team. ` +
+          `Your report with ${photoCount} photo${photoCount === 1 ? '' : 's'} will be saved on this phone and sent to ` +
+          `the Maintenance Team${offline ? " when you're back online" : ''}. ` +
           'You can only have one active report at a time, and you can cancel it until the Maintenance Team reviews it.',
         confirmText: 'Submit',
       })
@@ -330,106 +390,118 @@ export class NewReportPage implements ViewWillEnter, OnDestroy, HasPendingChange
     if (!confirmed || this.submitting()) return;
 
     this.submitting.set(true);
-    const loading = await this.loadings.create({ message: 'Submitting report…', backdropDismiss: false });
+    const loading = await this.loadings.create({ message: 'Saving report…', backdropDismiss: false });
     await loading.present();
-
-    // Re-check the one-active-report rule just before upload (the server still has the final say).
-    const canSubmit = await this.reports.refreshEligibility();
-    if (canSubmit !== true) {
-      await loading.dismiss();
-      this.submitting.set(false);
-      if (canSubmit === false) await this.explainBlocked();
-      else await this.toast("We couldn't confirm whether you can submit right now. Check your connection and try again.");
-      return;
-    }
-    const submitStartedAt = Date.now();
-
     try {
-      const value = this.form.getRawValue();
-      const useFacility = !this.manualLocation() && !!value.locationId;
-      const fix = this.gps();
-      const created = await firstValueFrom(
-        this.api.create({
-          images: this.photos().map((photo) => ({ blob: photo.blob, fileName: photo.fileName })),
-          description: value.description,
-          notes: value.notes,
-          locationId: useFacility ? value.locationId : null,
-          building: useFacility ? null : this.manualBuildingName(value.building, value.buildingId),
-          floor: useFacility ? null : value.floor,
-          roomOrArea: useFacility ? null : value.roomOrArea,
-          gpsLat: fix?.lat ?? null,
-          gpsLng: fix?.lng ?? null,
-        }),
-      );
-
+      // No network call before this: the report is durable on the phone first. The one-active-report rule is
+      // enforced by the server when it is sent (a conflict keeps it saved, as "blocked").
+      const id = await this.saveToPhone();
       this.submitted = true;
-      this.reports.markBlocked({
-        id: created.id,
-        reportNo: created.reportNo,
-        status: created.status,
-        agentStatus: created.agentStatus,
-        createdAt: created.createdAt,
+      this.draft.reset();
+
+      // Every saved report gets a send attempt now (slow or server-down included; offline waits for the
+      // connection). Only a good connection is worth waiting for, and only for a bounded time.
+      let received: CreateReportResponse | null = null;
+      const sent = this.sync.sent$.subscribe((event) => {
+        if (event.id === id) received = event.report;
       });
-      this.reports.invalidate();
-      void this.notifications.refresh();
+      const attempt = this.sync.syncNow(true);
+      if (this.connectivity.state() === 'online') {
+        loading.message = 'Sending report…';
+        await Promise.race([attempt, delay(SEND_WAIT_MS)]);
+      }
+      sent.unsubscribe();
       await loading.dismiss();
-      await this.toast(`Report ${created.reportNo} submitted.`, 'success');
-      // Replace this page so Back from the detail returns to the originating tab.
-      await this.nav.navigateForward(['/reports', created.id], { replaceUrl: true });
+
+      const report = received as CreateReportResponse | null;
+      if (report) {
+        await this.toast(`Report ${report.reportNo} submitted.`, 'success');
+        // Replace this page so Back from the detail returns to the originating tab.
+        await this.nav.navigateForward(['/reports', report.id], { replaceUrl: true });
+      } else {
+        await this.explainSaved(id);
+      }
     } catch (error) {
       await loading.dismiss();
-      await this.handleSubmitError(mapHttpError(error), submitStartedAt);
+      this.draft.open(); // the form stays: keep autosaving it
+      // Nothing was saved (the save is one transaction); the form keeps everything.
+      await this.toast(submitFailureMessage(error), 'danger');
     } finally {
       this.submitting.set(false);
     }
   }
 
-  private async handleSubmitError(error: AppError, submitStartedAt: number): Promise<void> {
-    if (error.code === 'ACTIVE_REPORT_EXISTS') {
-      // Another report won (or a race hit the DB unique index, which carries no details).
-      const active = toActiveReport(error.details?.['activeReport']);
-      if (active) this.reports.markBlocked(active);
-      else await this.reports.refreshEligibility();
-      await this.explainBlocked();
-      return;
-    }
-    if (error.isUncertain) {
-      // The server may already have created the report: never retry blindly. Check first.
-      const canSubmit = await this.reports.refreshEligibility();
-      const active = this.activeReport();
-      const createdNow = active?.createdAt ? Date.parse(active.createdAt) >= submitStartedAt - 60_000 : false;
-      if (canSubmit === false && active && createdNow) {
-        this.submitted = true;
-        this.reports.invalidate();
-        const view = await this.confirm.confirm({
-          header: 'Your report may have been submitted',
-          message: `${active.reportNo} was created just now. Open it to check before trying again.`,
-          confirmText: 'View report',
-          cancelText: 'Stay here',
-        });
-        if (view) await this.nav.navigateForward(['/reports', active.id], { replaceUrl: true });
-        return;
-      }
-      const alert = await this.alerts.create({
-        header: 'Submission not confirmed',
-        message: ERROR_COPY.uploadUncertain,
-        buttons: [
-          { text: 'Stay here', role: 'cancel' },
-          {
-            text: 'Check My Reports',
-            handler: () => {
-              this.submitted = true;
-              this.reports.invalidate();
-              void this.nav.navigateRoot('/tabs/reports');
-            },
-          },
-        ],
-      });
-      await alert.present();
-      return;
-    }
-    if (error.kind === 'UNAUTHORIZED') return; // handled globally
-    await this.toast(error.userMessage, 'danger');
+  /** One transaction: the report, its photos' original bytes and SHA-256 digests; the draft is deleted with it. */
+  private async saveToPhone(): Promise<string> {
+    const value = this.form.getRawValue();
+    const useFacility = !this.manualLocation() && !!value.locationId;
+    const fix = this.gps();
+    const photos = await Promise.all(
+      this.photos().map(async (photo) => {
+        const bytes = await photo.blob.arrayBuffer();
+        return { bytes, mimeType: photo.mimeType, fileName: photo.fileName, digest: await sha256Hex(bytes) };
+      }),
+    );
+    const id = crypto.randomUUID();
+    const userId = this.session.user()?.id;
+    if (!userId) throw new Error('No signed-in Reporter.');
+    // Stop autosaving first so a late autosave can't recreate the draft after it was deleted with this save.
+    const draftKeys = await this.draft.seal();
+    await this.outbox.add(
+      userId,
+      {
+        id,
+        capturedAt: new Date().toISOString(),
+        fields: {
+          description: value.description,
+          notes: value.notes || null,
+          locationId: useFacility ? value.locationId : null,
+          building: useFacility ? null : this.manualBuildingName(value.building, value.buildingId),
+          floor: useFacility ? null : value.floor || null,
+          roomOrArea: useFacility ? null : value.roomOrArea || null,
+          gpsLat: fix?.lat ?? null,
+          gpsLng: fix?.lng ?? null,
+        },
+        photos: photos.map(({ bytes, mimeType, fileName, digest }) => ({
+          fileName,
+          mimeType,
+          size: bytes.byteLength,
+          digest,
+          publicId: null,
+        })),
+        state: 'waiting',
+        reason: this.connectivity.state() === 'offline' ? 'offline' : null,
+        message: null,
+        activeReport: null,
+        attempts: 0,
+        reuploads: 0,
+        nextAttemptAt: null,
+      },
+      photos.map(({ bytes, mimeType }) => ({ bytes, mimeType })),
+      draftKeys,
+    );
+    return id;
+  }
+
+  /** Saved on the phone but not received by SEEFIX yet: never claim it was submitted. */
+  private async explainSaved(id: string): Promise<void> {
+    const item = this.outbox.items().find((current) => current.id === id);
+    const header =
+      item?.state === 'blocked' || item?.state === 'attention' ? 'Saved on this device, not sent' : 'Report saved on this device';
+    const message =
+      item?.state === 'blocked'
+        ? `${item.activeReport ? `${item.activeReport.reportNo} is still in progress. ` : 'You already have a report in progress. '}` +
+          'This report stays saved on this phone.'
+        : item?.state === 'attention'
+          ? `${item.message ?? 'SEEFIX could not accept this report.'} It stays saved on this phone.`
+          : `Waiting to send · ${item?.state === 'sending' ? 'Sending now' : waitingReason(item?.reason ?? null)}. ` +
+            `Your ${photoCountText(item?.photos.length ?? 0)} and ` +
+            'report details are saved on this phone. SEEFIX sends them automatically while the app is open; if you close ' +
+            'the app, it sends them the next time you open it online.';
+    const alert = await this.alerts.create({ header, message, buttons: ['OK'] });
+    await alert.present();
+    await alert.onDidDismiss();
+    await this.nav.navigateRoot('/tabs/home');
   }
 
   /** Blocked at submit time: keep the draft and offer the active report. */
@@ -472,7 +544,9 @@ export class NewReportPage implements ViewWillEnter, OnDestroy, HasPendingChange
     });
     await alert.present();
     const { role } = await alert.onDidDismiss();
-    return role === 'destructive';
+    if (role !== 'destructive') return false;
+    void this.draft.clear();
+    return true;
   }
 
   formatSize(bytes: number): string {
@@ -489,21 +563,43 @@ export class NewReportPage implements ViewWillEnter, OnDestroy, HasPendingChange
   }
 }
 
-/** Validates `error.details.activeReport` from a 409 before trusting it. */
-export function toActiveReport(value: unknown): ActiveReportDto | null {
-  if (!value || typeof value !== 'object') return null;
-  const candidate = value as Partial<ActiveReportDto>;
-  return typeof candidate.id === 'string' && typeof candidate.reportNo === 'string' && typeof candidate.status === 'string'
-    ? {
-        id: candidate.id,
-        reportNo: candidate.reportNo,
-        status: candidate.status,
-        agentStatus: candidate.agentStatus ?? null,
-        createdAt: candidate.createdAt,
-      }
-    : null;
+/** How long Submit waits for an immediate send on a good connection before saying "saved, sending". */
+export const SEND_WAIT_MS = 15_000;
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** Why Submit saved nothing (the form keeps everything). */
+function submitFailureMessage(error: unknown): string {
+  if (error instanceof StorageFullError) {
+    return 'Not enough free space on this phone to save the report. Free up some space and try again.';
+  }
+  if (error instanceof ReportAlreadyWaitingError) {
+    return error.reason === 'waiting'
+      ? 'A report saved on this phone is still waiting to send. You can submit this one after it has been sent and resolved, closed or cancelled. Your details are still here.'
+      : "Reports saved on this phone couldn't be read, so this one can't be saved yet. Restart the app. Your details are still here.";
+  }
+  return "We couldn't save the report on this phone. Your details are still here; please try again.";
 }
 
 function round6(value: number): number {
   return Math.round(value * 1e6) / 1e6;
+}
+
+const WAITING_REASONS: Record<Exclude<OutboxReason, null>, string> = {
+  offline: 'No internet connection',
+  slow: 'Slow connection',
+  server: "SEEFIX can't be reached",
+  upload: "The photo upload service can't be reached",
+  busy: 'SEEFIX is busy',
+  session: 'Sign in to send it',
+};
+
+export function waitingReason(reason: OutboxReason): string {
+  return reason ? WAITING_REASONS[reason] : 'Not yet submitted';
+}
+
+function photoCountText(count: number): string {
+  return `${count} photo${count === 1 ? '' : 's'}`;
 }

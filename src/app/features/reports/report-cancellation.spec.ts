@@ -4,7 +4,7 @@ import { ReportDetailResponse } from '../../core/models/report.model';
 import { isAssessmentInProgress } from '../../shared/formatters/report-status-label';
 import { timelineActor } from '../../shared/formatters/timeline-step';
 import { PENDING_SUMMARY, REPORT_4_DETAIL } from '../../testing/fixtures/reports.fixture';
-import { toActiveReport } from './new-report/new-report.page';
+import { toActiveReport } from './report.mapper';
 import { toReportDetail, toReportSummary } from './report.mapper';
 
 const cancelledScreening = {
