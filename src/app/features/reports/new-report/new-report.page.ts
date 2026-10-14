@@ -1,4 +1,4 @@
-import { Component, OnDestroy, computed, inject, signal } from '@angular/core';
+import { Component, OnDestroy, computed, effect, inject, signal } from '@angular/core';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Geolocation } from '@capacitor/geolocation';
@@ -142,6 +142,11 @@ export class NewReportPage implements ViewWillEnter, OnDestroy, HasPendingChange
   private confirmingSubmit = false;
 
   constructor() {
+    // Any server-confirmed "allowed" opens the form. This includes a background re-check (back online / app
+    // resumed) that succeeds after this page's own check failed, which otherwise left it on "Checking…".
+    effect(() => {
+      if (this.eligibility() === 'allowed') this.unlocked.set(true);
+    });
     this.form.controls.buildingId.valueChanges.pipe(takeUntilDestroyed()).subscribe((buildingId) => {
       this.form.controls.locationId.setValue('');
       this.locations.set([]);
