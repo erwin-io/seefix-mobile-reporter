@@ -430,6 +430,34 @@ describe('Review 3 corrections (P2)', () => {
   });
 });
 
+describe('429 on the signed-upload step (seefix-api#19 per-user throttle)', () => {
+  afterEach(() => {
+    const http = TestBed.inject(HttpTestingController);
+    answerOtherRequests(http);
+    http.verify();
+  });
+
+  it('waits (busy) per Retry-After and makes no further request until it is over', async () => {
+    const { store, http } = launch();
+    await saveTwoPhotoReport(store);
+    const run = TestBed.inject(ReportSyncService).syncNow(true);
+    (await nextRequest(http, SIGN_URL)).flush({ error: { code: 'RATE_LIMITED' } }, {
+      status: 429,
+      statusText: 'Too Many Requests',
+      headers: { 'Retry-After': '900' },
+    });
+    await run;
+    const item = store.items()[0];
+    expect(item).toMatchObject({ state: 'waiting', reason: 'busy', attempts: 1 });
+    expect(item.nextAttemptAt).toBeGreaterThanOrEqual(Date.now() + 890_000);
+    http.expectNone(SIGN_URL);
+    http.expectNone(REPORTS_URL);
+    // A non-forced run before the wait is over sends nothing.
+    await TestBed.inject(ReportSyncService).syncNow();
+    http.expectNone(SIGN_URL);
+  });
+});
+
 describe('Pausing sends (P3 sign-out)', () => {
   afterEach(() => {
     const http = TestBed.inject(HttpTestingController);

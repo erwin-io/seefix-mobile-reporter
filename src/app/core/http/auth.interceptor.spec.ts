@@ -54,6 +54,11 @@ describe('auth interceptors', () => {
     expect(authStub.handleSessionEnded).toHaveBeenCalledWith('SESSION_EXPIRED');
   });
 
+  it('a 429 (V2 rate limit / per-user throttle) never ends the session', () => {
+    failWith('/api/reports/my', 429, 'RATE_LIMITED');
+    expect(authStub.handleSessionEnded).not.toHaveBeenCalled();
+  });
+
   it('shows the security-change message for SESSION_REVOKED (SEC-04)', () => {
     failWith('/api/auth/me', 401, 'SESSION_REVOKED');
     expect(authStub.handleSessionEnded).toHaveBeenCalledWith('SESSION_REVOKED');
