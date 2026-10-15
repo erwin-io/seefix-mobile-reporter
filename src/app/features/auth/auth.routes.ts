@@ -1,9 +1,14 @@
 import { Routes } from '@angular/router';
+import { pendingChangesGuard } from '../reports/new-report/pending-changes.guard';
 
 /** Public, guest-only screens. Emails/codes never travel in these URLs. */
 export const authRoutes: Routes = [
   { path: 'login', loadComponent: () => import('./login/login.page').then((m) => m.LoginPage) },
-  { path: 'register', loadComponent: () => import('./register/register.page').then((m) => m.RegisterPage) },
+  {
+    path: 'register',
+    canDeactivate: [pendingChangesGuard],
+    loadComponent: () => import('./register/register.page').then((m) => m.RegisterPage),
+  },
   {
     path: 'verify-email',
     loadComponent: () => import('./verify-email/verify-email.page').then((m) => m.VerifyEmailPage),

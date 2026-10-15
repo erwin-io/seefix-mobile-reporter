@@ -1,9 +1,14 @@
 import { Component, OnDestroy, inject } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { IonApp, IonRouterOutlet, ToastController } from '@ionic/angular';
+import { Router } from '@angular/router';
+import { App } from '@capacitor/app';
+import { ActionSheetController, IonApp, IonRouterOutlet, NavController, Platform, ToastController } from '@ionic/angular';
 import { registerAppIcons } from './core/config/icons';
 import { AppResumeService } from './core/lifecycle/app-resume.service';
 import { ReportSyncService } from './features/reports/outbox/report-sync.service';
+
+/** Back on these asks before leaving the app; every other page navigates back as usual. */
+const MAIN_SCREENS = new Set(['/auth/login', '/tabs/home', '/tabs/reports', '/tabs/profile']);
 
 @Component({
   selector: 'app-root',
@@ -13,6 +18,9 @@ import { ReportSyncService } from './features/reports/outbox/report-sync.service
 export class AppComponent implements OnDestroy {
   private readonly lifecycle = inject(AppResumeService);
   private readonly toasts = inject(ToastController);
+  private readonly router = inject(Router);
+  private readonly nav = inject(NavController);
+  private readonly sheets = inject(ActionSheetController);
 
   constructor() {
     registerAppIcons();
@@ -22,10 +30,32 @@ export class AppComponent implements OnDestroy {
     inject(ReportSyncService)
       .sent$.pipe(takeUntilDestroyed())
       .subscribe(({ report }) => void this.announceReceived(report.reportNo));
+    // Android back: open overlays close first (Ionic, priority 100). Detail pages keep the default back (next()).
+    inject(Platform).backButton.subscribeWithPriority(10, (next) => this.onBack(next));
   }
 
   ngOnDestroy(): void {
     void this.lifecycle.stop();
+  }
+
+  private onBack(next: () => void): void {
+    const path = this.router.url.split(/[?#]/)[0];
+    if (MAIN_SCREENS.has(path)) void this.confirmLeave();
+    // Register's canDeactivate guard asks first when any field has text.
+    else if (path === '/auth/register') void this.nav.navigateBack('/auth/login');
+    else next();
+  }
+
+  private async confirmLeave(): Promise<void> {
+    const sheet = await this.sheets.create({
+      header: 'Leave SEEFIX Reporter?',
+      buttons: [
+        { text: 'Minimize app', handler: () => void App.minimizeApp() },
+        { text: 'Close app', role: 'destructive', handler: () => void App.exitApp() },
+        { text: 'Cancel', role: 'cancel' },
+      ],
+    });
+    await sheet.present();
   }
 
   private async announceReceived(reportNo: string): Promise<void> {

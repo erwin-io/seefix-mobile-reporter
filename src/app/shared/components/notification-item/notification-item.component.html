@@ -18,7 +18,7 @@
       }
       {{ item().title }}
     </h3>
-    <p class="preview" [class.compact]="compact()">{{ item().message }}</p>
+    <p class="preview">{{ item().message }}</p>
     <ion-note>{{ item().createdAt | date: (compact() ? 'MMM d, h:mm a' : 'MMM d, y, h:mm a') }}</ion-note>
   </ion-label>
 </ion-item>

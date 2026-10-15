@@ -1,6 +1,7 @@
 import { Component, inject, signal } from '@angular/core';
 import { NonNullableFormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import {
+  AlertController,
   IonBackButton,
   IonButton,
   IonButtons,
@@ -59,6 +60,7 @@ export class RegisterPage {
   private readonly auth = inject(AuthService);
   private readonly flow = inject(AuthFlowStore);
   private readonly nav = inject(NavController);
+  private readonly alerts = inject(AlertController);
 
   readonly form = inject(NonNullableFormBuilder).group(
     {
@@ -76,6 +78,22 @@ export class RegisterPage {
 
   get mismatch(): boolean {
     return this.form.hasError('mismatch') && this.form.controls.confirmPassword.touched;
+  }
+
+  /** Back (toolbar or Android) leaves silently when every field is empty, otherwise asks first. */
+  async canLeave(): Promise<boolean> {
+    if (Object.values(this.form.getRawValue()).every((value) => !value.trim())) return true;
+    const alert = await this.alerts.create({
+      header: 'Discard your details?',
+      message: "Your account hasn't been created yet.",
+      buttons: [
+        { text: 'Keep editing', role: 'cancel' },
+        { text: 'Discard', role: 'destructive' },
+      ],
+    });
+    await alert.present();
+    const { role } = await alert.onDidDismiss();
+    return role === 'destructive';
   }
 
   async submit(): Promise<void> {

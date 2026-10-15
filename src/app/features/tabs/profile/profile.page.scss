@@ -38,3 +38,13 @@ ion-note[slot='end'] {
 .hint-item {
   --min-height: 0;
 }
+
+// Tighter icon-to-label gap than Ionic's default (32px) in the Account and Settings lists.
+ion-item > ion-icon[slot='start'] {
+  margin-inline-end: 16px;
+}
+
+// 80% of the global 56px `.regular` button height.
+ion-button.logout {
+  height: 45px !important;
+}
