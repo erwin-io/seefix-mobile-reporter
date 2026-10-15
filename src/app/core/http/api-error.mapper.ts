@@ -58,6 +58,7 @@ export const ERROR_COPY = {
   otpExpired: 'This code has expired or can no longer be used. Request a new one.',
   otpCooldown: 'Please wait a minute before requesting another code.',
   otpRateLimit: 'Too many code requests. Please try again later.',
+  rateLimited: 'Too many attempts. Please wait a few minutes and try again.',
   emailDelivery: "We couldn't send the email right now. Please try again in a minute.",
   uploadInvalid: 'Upload 1–5 JPEG, PNG or WebP photos (up to 10 MB each).',
   uploadUncertain: "We couldn't confirm whether your report was submitted. Check My Reports before trying again.",
@@ -84,6 +85,8 @@ const CODE_COPY: Record<string, string> = {
   OTP_EXPIRED: ERROR_COPY.otpExpired,
   OTP_COOLDOWN: ERROR_COPY.otpCooldown,
   OTP_RATE_LIMIT: ERROR_COPY.otpRateLimit,
+  // seefix-api#19: sign-in, register, code and password-check limits, plus the per-user throttle.
+  RATE_LIMITED: ERROR_COPY.rateLimited,
   VERIFICATION_INVALID: "This email can't be verified. If it's already verified, sign in.",
   EMAIL_UNCHANGED: 'Enter a different email address.',
   PASSWORD_UNCHANGED: 'Your new password must be different from your current password.',
@@ -150,7 +153,7 @@ export function mapHttpError(error: unknown): AppError {
   }
   if (status === 429) {
     const retryAfterMs = parseRetryAfter(error.headers?.get('Retry-After') ?? null);
-    return new AppError('RATE_LIMITED', known ?? ERROR_COPY.otpRateLimit, code, status, null, retryAfterMs);
+    return new AppError('RATE_LIMITED', known ?? ERROR_COPY.rateLimited, code, status, null, retryAfterMs);
   }
   if (status === 503 && (code === 'EMAIL_DELIVERY_FAILED' || code === 'EMAIL_SERVICE_UNAVAILABLE')) {
     return new AppError('EMAIL_DELIVERY', ERROR_COPY.emailDelivery, code, status);

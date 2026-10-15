@@ -1,6 +1,6 @@
-import { HttpErrorResponse } from '@angular/common/http';
+import { HttpErrorResponse, HttpHeaders } from '@angular/common/http';
 import { TimeoutError } from 'rxjs';
-import { ERROR_COPY, mapHttpError } from './api-error.mapper';
+import { ERROR_COPY, mapHttpError, parseRetryAfter } from './api-error.mapper';
 
 function httpError(status: number, code?: string, message?: string): HttpErrorResponse {
   return new HttpErrorResponse({ status, error: code ? { error: { code, message } } : null });
@@ -73,5 +73,39 @@ describe('mapHttpError', () => {
     const error = mapHttpError(httpError(403, 'FORBIDDEN', 'You cannot access this report.'));
     expect(error.kind).toBe('FORBIDDEN');
     expect(error.userMessage).toBe(ERROR_COPY.forbidden);
+  });
+
+  describe('429 from the V2 rate limits (seefix-api#19)', () => {
+    const limited = (retryAfter?: string, code: string | undefined = 'RATE_LIMITED') =>
+      new HttpErrorResponse({
+        status: 429,
+        error: code ? { error: { code, message: 'Too many sign-in attempts.' } } : null,
+        headers: retryAfter ? new HttpHeaders({ 'Retry-After': retryAfter }) : undefined,
+      });
+
+    it('uses generic wait copy, not the code-request wording, and never echoes server text', () => {
+      const error = mapHttpError(limited('900'));
+      expect(error.kind).toBe('RATE_LIMITED');
+      expect(error.userMessage).toBe(ERROR_COPY.rateLimited);
+      expect(error.userMessage).not.toContain('code');
+      expect(error.retryAfterMs).toBe(900_000);
+    });
+
+    it('keeps the specific OTP copy for the existing OTP codes', () => {
+      expect(mapHttpError(limited(undefined, 'OTP_RATE_LIMIT')).userMessage).toBe(ERROR_COPY.otpRateLimit);
+      expect(mapHttpError(limited(undefined, 'OTP_COOLDOWN')).userMessage).toBe(ERROR_COPY.otpCooldown);
+    });
+
+    it('a 429 without a body or Retry-After (cross-origin header hidden) is still RATE_LIMITED with no wait hint', () => {
+      const error = mapHttpError(limited(undefined, undefined));
+      expect(error).toMatchObject({ kind: 'RATE_LIMITED', userMessage: ERROR_COPY.rateLimited, retryAfterMs: null });
+    });
+
+    it('parses Retry-After as seconds or an HTTP date and ignores junk', () => {
+      expect(parseRetryAfter('120')).toBe(120_000);
+      expect(parseRetryAfter('Thu, 01 Jan 2026 00:01:00 GMT', Date.parse('2026-01-01T00:00:00Z'))).toBe(60_000);
+      expect(parseRetryAfter('soon')).toBeNull();
+      expect(parseRetryAfter(null)).toBeNull();
+    });
   });
 });

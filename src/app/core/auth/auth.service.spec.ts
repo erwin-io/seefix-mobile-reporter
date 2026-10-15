@@ -165,6 +165,17 @@ describe('AuthService', () => {
       expect(session.isAuthenticated()).toBe(false);
     });
 
+    it('429 from the login rate limit: rate-limited copy with the Retry-After wait, no session, no navigation', async () => {
+      const result = auth.login({ identifier: 'reporter@example.test', password: 'secret-pass' });
+      await flushAsync();
+      httpMock
+        .expectOne(apiUrl('/api/auth/login'))
+        .flush(apiError('RATE_LIMITED'), { status: 429, statusText: 'Too Many Requests', headers: { 'Retry-After': '300' } });
+      await expect(result).rejects.toMatchObject({ kind: 'RATE_LIMITED', retryAfterMs: 300_000 });
+      expect(TestBed.inject(SessionStore).isAuthenticated()).toBe(false);
+      expect(nav.navigateRoot).not.toHaveBeenCalled();
+    });
+
     it('surfaces invalid credentials without a session (AUTH-09)', async () => {
       const result = auth.login({ identifier: 'reporter@example.test', password: 'wrong' });
       await flushAsync();
