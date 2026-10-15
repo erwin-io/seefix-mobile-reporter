@@ -157,11 +157,6 @@ ion-toolbar[color='primary'] ion-title {
   border: none !important;
 }
 
-/* ===== Floating "Report an Issue" action ===== */
-ion-fab.report-fab {
-  margin-bottom: var(--safe-bottom);
-}
-
 /* ===== Overlays ===== */
 .alert-button-cancel {
   color: var(--ion-color-medium-shade);
