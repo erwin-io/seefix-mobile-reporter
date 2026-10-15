@@ -289,3 +289,10 @@ ion-modal.success-screen-modal {
   color: var(--ion-color-primary) !important;
   font-weight: 600;
 }
+
+/* Ionic focuses the dialog box when it opens. Coming from a text field, the WebView draws its focus ring around
+   the whole box (the yellow border). The buttons inside keep their own focus styles. */
+ion-alert .alert-wrapper:focus-visible,
+ion-action-sheet .action-sheet-wrapper:focus-visible {
+  outline: none;
+}
