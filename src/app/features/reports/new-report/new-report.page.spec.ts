@@ -27,7 +27,11 @@ describe('NewReportPage eligibility gate', () => {
     httpMock = TestBed.inject(HttpTestingController);
   });
 
-  afterEach(() => httpMock.verify());
+  afterEach(() => {
+    // The signed-in app syncs buildings/locations in the background (ReferenceStore); not what these tests check.
+    httpMock.match((r) => r.url.startsWith(apiUrl('/api/reference/'))).forEach((r) => r.flush({ items: [] }));
+    httpMock.verify();
+  });
 
   const createPage = () => TestBed.runInInjectionContext(() => new NewReportPage());
 

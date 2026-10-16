@@ -5,6 +5,7 @@ import { App } from '@capacitor/app';
 import { ActionSheetController, IonApp, IonRouterOutlet, NavController, Platform, ToastController } from '@ionic/angular';
 import { registerAppIcons } from './core/config/icons';
 import { AppResumeService } from './core/lifecycle/app-resume.service';
+import { ReferenceStore } from './features/reference/reference.store';
 import { ReportSyncService } from './features/reports/outbox/report-sync.service';
 
 /** Back on these asks before leaving the app; every other page navigates back as usual. */
@@ -30,6 +31,8 @@ export class AppComponent implements OnDestroy {
     inject(ReportSyncService)
       .sent$.pipe(takeUntilDestroyed())
       .subscribe(({ report }) => void this.announceReceived(report.reportNo));
+    // Created at start so buildings/locations are fetched and saved on the phone after sign-in (report form offline).
+    inject(ReferenceStore);
     // Android back: open overlays close first (Ionic, priority 100). Detail pages keep the default back (next()).
     inject(Platform).backButton.subscribeWithPriority(10, (next) => this.onBack(next));
   }
