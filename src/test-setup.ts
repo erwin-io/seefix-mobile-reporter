@@ -5,6 +5,7 @@ import { IDBFactory } from 'fake-indexeddb';
 // on-device data from leaking between tests.
 beforeEach(() => {
   globalThis.indexedDB = new IDBFactory();
+  sessionStorage.clear(); // a fresh browser tab: the web session token doesn't leak between tests
 });
 
 // Polyfills for running unit tests under jsdom (the default Vitest environment).
